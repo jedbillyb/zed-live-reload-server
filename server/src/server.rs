@@ -374,13 +374,23 @@ mod tests {
         let (listener, port) = bind(&config).await.unwrap();
         assert!(port > 0);
 
-        // Now ask for the port we just took, and expect the next one.
+        // Now ask for the port we just took, and expect to be moved off it.
         let config = Config {
             port,
             ..Config::default()
         };
         let (_next, next_port) = bind(&config).await.unwrap();
-        assert_eq!(next_port, port + 1);
+
+        // Deliberately not asserting exactly `port + 1`. Tests run in parallel
+        // and the machine has other things on it, so the next port up may
+        // legitimately be busy and the scan continues past it. Requiring
+        // adjacency made this fail on a loaded CI runner.
+        assert!(
+            next_port > port && next_port <= port + PORT_SCAN_LIMIT,
+            "expected a port in {}..={}, got {next_port}",
+            port + 1,
+            port + PORT_SCAN_LIMIT
+        );
         drop(listener);
     }
 
