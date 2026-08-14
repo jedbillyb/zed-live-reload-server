@@ -286,6 +286,15 @@ impl Backend {
             return;
         }
 
+        // Clients push the current configuration once at startup, and may
+        // resend it whenever anything in settings changes. Restarting on every
+        // such notification would tear down a server the user is already using
+        // and, because the browser was sent to the original port, strand the
+        // page they are looking at.
+        if config == **self.config.read().await {
+            return;
+        }
+
         *self.config.write().await = Arc::new(config);
         let config = self.config().await;
 

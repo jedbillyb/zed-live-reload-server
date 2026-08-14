@@ -143,6 +143,11 @@ impl LiveServer {
             return false;
         };
         instance.accept.abort();
+        // Aborting only schedules the task to be dropped, and the listening
+        // socket lives until that happens. Without waiting here, an immediate
+        // restart races the old listener and the rebind lands on the next port
+        // up, stranding any browser already pointed at the original one.
+        let _ = instance.accept.await;
         // Closes connections that are open but idle between requests, so a
         // pooled browser socket cannot be served after the server has stopped.
         let _ = instance.shutdown.send(());
@@ -385,6 +390,39 @@ mod tests {
         assert_eq!(server.status().await, Status::Stopped);
         assert!(!server.stop().await);
         assert!(server.url_for(None, &Config::default()).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_restart_keeps_the_same_port() {
+        // Regression: `stop` used to only `abort` the accept task, which left
+        // the listening socket alive until that task was actually dropped. An
+        // immediate restart then found the port still taken and scanned to the
+        // next one, stranding any browser already pointed at the original.
+        let directory = std::env::temp_dir().join("live-reload-restart-test");
+        std::fs::create_dir_all(&directory).unwrap();
+
+        let server = LiveServer::new(directory, Overlay::default());
+        let config = Arc::new(Config {
+            port: 0,
+            open_browser: false,
+            ..Config::default()
+        });
+
+        let (first, _) = server.start(config.clone()).await.unwrap();
+
+        // Ask for the port it just had, which is what a real restart does.
+        let config = Arc::new(Config {
+            port: first,
+            open_browser: false,
+            ..Config::default()
+        });
+        let (second, _) = server.restart(config).await.unwrap();
+
+        assert_eq!(
+            second, first,
+            "restart moved the server from {first} to {second}"
+        );
+        server.stop().await;
     }
 
     #[tokio::test]

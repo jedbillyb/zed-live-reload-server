@@ -56,7 +56,7 @@ fn default_ignore() -> Vec<String> {
 }
 
 /// A path prefix served from somewhere outside the document root.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Mount {
     /// URL prefix, for example `/lib`.
     pub route: String,
@@ -64,7 +64,7 @@ pub struct Mount {
     pub path: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// Preferred port. If it is taken the server walks upward from here.
@@ -166,5 +166,61 @@ impl Config {
     /// Whether the bind address is reachable from other machines.
     pub fn is_public(&self) -> bool {
         matches!(self.host.as_str(), "0.0.0.0" | "::" | "[::]")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn resending_the_same_settings_compares_equal() {
+        // Editors push the configuration once at startup and again on any
+        // settings change. Comparing equal is what stops a no-op notification
+        // from restarting a server the user is already using.
+        let settings = json!({ "port": 5500, "live_changes": true });
+        let (first, _) = Config::parse(Some(settings.clone()));
+        let (second, _) = Config::parse(Some(settings));
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn a_real_change_compares_unequal() {
+        let (first, _) = Config::parse(Some(json!({ "port": 5500 })));
+        let (second, _) = Config::parse(Some(json!({ "port": 3000 })));
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn an_absent_config_is_the_default() {
+        let (config, error) = Config::parse(None);
+        assert_eq!(config, Config::default());
+        assert!(error.is_none());
+
+        let (config, error) = Config::parse(Some(serde_json::Value::Null));
+        assert_eq!(config, Config::default());
+        assert!(error.is_none());
+    }
+
+    #[test]
+    fn an_empty_object_is_also_the_default() {
+        // Zed sends `{}` when the user has set nothing, and that must not read
+        // as a change against the defaults built at startup.
+        let (config, _) = Config::parse(Some(json!({})));
+        assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn a_malformed_config_falls_back_to_defaults_with_an_error() {
+        let (config, error) = Config::parse(Some(json!({ "port": "not a number" })));
+        assert_eq!(config, Config::default());
+        assert!(error.is_some());
+    }
+
+    #[test]
+    fn accepts_the_legacy_start_port_alias() {
+        let (config, _) = Config::parse(Some(json!({ "start_port": 4000 })));
+        assert_eq!(config.port, 4000);
     }
 }
