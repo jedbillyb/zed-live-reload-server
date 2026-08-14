@@ -77,7 +77,9 @@ pub struct Config {
     pub root: String,
     /// Start serving as soon as the project opens.
     pub auto_start: bool,
-    /// Open a browser when the server starts.
+    /// Open a browser when the server starts. Off by default: starting a
+    /// server should not seize the screen, and the site is one keystroke or
+    /// one code action away when it is actually wanted.
     pub open_browser: bool,
     /// Browser command to use. `None` defers to the system default handler.
     pub browser: Option<String>,
@@ -110,7 +112,7 @@ impl Default for Config {
             host: default_host(),
             root: default_root(),
             auto_start: default_true(),
-            open_browser: default_true(),
+            open_browser: false,
             browser: None,
             index: default_index(),
             spa: false,

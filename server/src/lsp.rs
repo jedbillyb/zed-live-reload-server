@@ -19,6 +19,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
 use crate::config::Config;
+use crate::control::{self, Command as ControlCommand, Request as ControlRequest};
 use crate::overlay::Overlay;
 use crate::reload::classify;
 use crate::server::{open_browser, LiveServer, Status};
@@ -36,6 +37,7 @@ pub const CMD_OPEN: &str = "liveReload.open";
 /// long as the server is up.
 const PROGRESS_TOKEN: &str = "live-reload/status";
 
+#[derive(Clone)]
 pub struct Backend {
     client: Client,
     config: Arc<RwLock<Arc<Config>>>,
@@ -46,6 +48,8 @@ pub struct Backend {
     /// Counter used to coalesce unsaved-buffer changes. Each keystroke takes a
     /// number; a pending reload only fires if no later keystroke arrived.
     keystroke: Arc<AtomicU64>,
+    /// State files written by the control channel, removed on shutdown.
+    control_files: Arc<RwLock<Vec<PathBuf>>>,
 }
 
 impl Backend {
@@ -57,6 +61,7 @@ impl Backend {
             servers: Arc::new(RwLock::new(HashMap::new())),
             progress_shown: Arc::new(RwLock::new(false)),
             keystroke: Arc::new(AtomicU64::new(0)),
+            control_files: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -227,6 +232,87 @@ impl Backend {
             self.info("Live Reload stopped").await;
         }
         self.refresh_status().await;
+    }
+
+    /// Starts the control channel for every workspace and the task that
+    /// services it. Failure is reported but not fatal: without it the toggle
+    /// command stops working, while the code actions carry on unaffected.
+    async fn start_control_channel(&self) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<ControlRequest>(16);
+
+        let roots: Vec<PathBuf> = self.servers.read().await.keys().cloned().collect();
+        for root in roots {
+            match control::listen(root, tx.clone()).await {
+                Ok(path) => self.control_files.write().await.push(path),
+                Err(err) => self.log(err).await,
+            }
+        }
+
+        let backend = self.clone();
+        tokio::spawn(async move {
+            while let Some(request) = rx.recv().await {
+                let response = backend
+                    .run_control(request.workspace, request.command)
+                    .await;
+                let _ = request.reply.send(response);
+            }
+        });
+    }
+
+    /// Runs one control command and describes the outcome for the caller's
+    /// terminal, since there is no editor UI on that side.
+    async fn run_control(&self, workspace: PathBuf, command: ControlCommand) -> String {
+        let Some(server) = self.server_at(&workspace).await else {
+            return format!("error: no workspace at {}", workspace.display());
+        };
+        let config = self.config().await;
+        let running = server.status().await != Status::Stopped;
+
+        let command = match command {
+            // Resolved here so the reply describes what actually happened
+            // rather than the word the user typed.
+            ControlCommand::Toggle if running => ControlCommand::Stop,
+            ControlCommand::Toggle => ControlCommand::Start,
+            other => other,
+        };
+
+        match command {
+            ControlCommand::Stop => {
+                self.stop(&server).await;
+                "stopped".to_string()
+            }
+            ControlCommand::Start => {
+                if running {
+                    return match server.status().await {
+                        Status::Running { port, .. } => format!("already running on :{port}"),
+                        Status::Stopped => "stopped".to_string(),
+                    };
+                }
+                self.start(&server, true).await;
+                match server.status().await {
+                    Status::Running { port, .. } => format!("started on :{port}"),
+                    Status::Stopped => "error: failed to start".to_string(),
+                }
+            }
+            ControlCommand::Open => {
+                if !running {
+                    self.start(&server, true).await;
+                }
+                match server.url_for(None, &config).await {
+                    Some(url) => match open_browser(&url, config.browser.as_deref()) {
+                        Ok(()) => format!("opened {url}"),
+                        Err(err) => format!("error: {err}"),
+                    },
+                    None => "error: failed to start".to_string(),
+                }
+            }
+            ControlCommand::Status => match server.status().await {
+                Status::Running { host, port } => format!("running on {host}:{port}"),
+                Status::Stopped => "stopped".to_string(),
+            },
+            // Already resolved above.
+            ControlCommand::Toggle => unreachable!("toggle is resolved before dispatch"),
+        }
     }
 
     /* ---------------------------------------------------------- documents */
@@ -427,6 +513,8 @@ impl LanguageServer for Backend {
         self.log(format!("Live Reload {} ready", env!("CARGO_PKG_VERSION")))
             .await;
 
+        self.start_control_channel().await;
+
         if !config.auto_start {
             return;
         }
@@ -443,6 +531,11 @@ impl LanguageServer for Backend {
         let servers: Vec<Arc<LiveServer>> = self.servers.read().await.values().cloned().collect();
         for server in servers {
             server.stop().await;
+        }
+        // Leaving these behind would make the CLI report a running server that
+        // is not there, until it tried to connect and cleaned up after itself.
+        for path in self.control_files.read().await.iter() {
+            control::remove_state(path);
         }
         self.clear_status().await;
         Ok(())

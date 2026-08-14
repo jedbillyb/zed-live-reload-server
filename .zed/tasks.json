@@ -1,29 +1,58 @@
-// Optional. These run `live-reload-lsp` as a standalone server in Zed's
-// terminal panel, independently of the one the extension manages.
+// Live Reload tasks.
 //
-// Useful if you want a server bound to a key without going through code
-// actions. Give it a different port from the extension's so the two do not
-// fight over one, or set `"auto_start": false` in your Zed settings and use
-// only these.
+// Copy these into your own project's .zed/tasks.json, or into
+// ~/.config/zed/tasks.json to have them everywhere.
 //
-// Run with `task: spawn`, or bind one:
-//   { "context": "Workspace",
-//     "bindings": { "cmd-alt-g": ["task::Spawn", { "task_name": "Live Reload: serve" }] } }
+// They drive the server the extension is already running, so they use your
+// Zed settings and keep the unsaved-buffer mode working. Run one with
+// `task: spawn`, or bind it to a key in ~/.config/zed/keymap.json:
+//
+//   [
+//     {
+//       "context": "Workspace",
+//       "bindings": {
+//         "cmd-alt-l": ["task::Spawn", { "task_name": "Live Reload: toggle" }],
+//         "cmd-alt-o": ["task::Spawn", { "task_name": "Live Reload: open browser" }]
+//       }
+//     }
+//   ]
+//
+// `hide: "on_success"` keeps the terminal panel from stealing focus, so a
+// toggle is a single keystroke with no visible interruption.
 [
   {
-    "label": "Live Reload: serve",
+    "label": "Live Reload: toggle",
     "command": "live-reload-lsp",
-    "args": ["serve", "--port", "5600", "$ZED_WORKTREE_ROOT"],
+    "args": ["toggle", "$ZED_WORKTREE_ROOT"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "never",
+    "hide": "on_success"
+  },
+  {
+    "label": "Live Reload: open browser",
+    "command": "live-reload-lsp",
+    "args": ["open", "$ZED_WORKTREE_ROOT"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "never",
+    "hide": "on_success"
+  },
+  {
+    "label": "Live Reload: status",
+    "command": "live-reload-lsp",
+    "args": ["status", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
     "reveal": "always"
   },
   {
-    "label": "Live Reload: serve on the network",
+    "label": "Live Reload: stop",
     "command": "live-reload-lsp",
-    "args": ["serve", "--port", "5600", "--host", "0.0.0.0", "$ZED_WORKTREE_ROOT"],
+    "args": ["stop", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
-    "reveal": "always"
+    "reveal": "never",
+    "hide": "on_success"
   }
 ]

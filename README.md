@@ -45,43 +45,77 @@ repository's releases on first use. To use your own build instead, see
 
 ## Using it
 
-The server starts automatically when you open a project (set `auto_start` to
-`false` to change that) and prints its address in a notification.
+The server starts when you open a project and reports its address in Zed's
+status bar as `Live Reload :5500`.
 
-Everything else is a **code action** on the file you are looking at:
+**It does not open a browser on its own.** Starting a server should not seize
+your screen, so `open_browser` is off by default. Turn it on if you want the
+old behaviour.
 
-- *Live Reload: open this file in the browser (:5500)*
-- *Live Reload: restart server (:5500)*
-- *Live Reload: stop server (:5500)*
-- *Live Reload: start server*, when it is not running
+### One keystroke
 
-Right-click in the editor and choose **Code Actions**, or bind a key:
+The fastest way to start and stop is a bound task. Copy [`.zed/tasks.json`]
+from this repo into your project (or `~/.config/zed/tasks.json` for all
+projects), then bind it:
 
 ```json
 // ~/.config/zed/keymap.json
 [
   {
-    "context": "Editor",
-    "bindings": { "cmd-alt-l": "editor::ToggleCodeActions" }
+    "context": "Workspace",
+    "bindings": {
+      "cmd-alt-l": ["task::Spawn", { "task_name": "Live Reload: toggle" }],
+      "cmd-alt-o": ["task::Spawn", { "task_name": "Live Reload: open browser" }]
+    }
   }
 ]
 ```
 
-The list only ever offers actions that apply, so you never get a *stop* on a
-server that is not running.
+`cmd-alt-l` now starts the server if it is stopped and stops it if it is
+running, with no menu and no terminal stealing focus. `cmd-alt-o` opens the
+site, starting the server first if needed.
 
-### About the status bar
+These drive the very same server the extension runs, so they respect your
+settings and keep the unsaved-buffer mode working. They are not a second
+server.
+
+### Code actions
+
+The same operations are available without any setup. Right-click in the editor
+and choose **Code Actions**:
+
+- *Live Reload: open this file in the browser (:5500)* — opens the file you are
+  on, not just the index
+- *Live Reload: restart server (:5500)*
+- *Live Reload: stop server (:5500)*
+
+When the server is stopped the only offer is *start server*, so the list never
+contains something that would do nothing.
+
+### From a terminal
+
+```sh
+live-reload-lsp toggle    # in the project directory
+live-reload-lsp status
+live-reload-lsp open
+```
+
+### Why there is no status bar button
 
 Zed extensions **cannot add status bar buttons**. The extension API
-(`zed_extension_api` 0.7) exposes language servers, slash commands, themes,
-context servers, debug adapters, snippets and docs, and no UI extension point at
-all. There is no way for any extension to put a "Go Live" button down there, so
-this one does the two things that are possible:
+(`zed_extension_api` 0.7) offers language servers, slash commands, themes,
+context servers, debug adapters, snippets and docs, and no UI extension point
+at all, so no extension can put a Go Live button down there.
 
-1. While a server is running it reports LSP progress titled `Live Reload :5500`,
-   which Zed shows in its language server status area. That is the closest thing
-   to a live status indicator available.
-2. The code actions above, which are one keystroke away once bound.
+This is being worked on upstream: [Zed discussion #53403][rfc] proposes a
+Visual Extension API, with a status bar API as its first phase. When that
+ships, wiring a button to the start/stop commands here will be a small change.
+
+Until then, `Live Reload :5500` appears in the language server status area
+while the server runs, and the bound task above is the closest thing to a
+click.
+
+[rfc]: https://github.com/zed-industries/zed/discussions/53403
 
 ## Settings
 
@@ -97,7 +131,7 @@ Code Live Server options where an equivalent exists, in snake_case.
         "host": "127.0.0.1",
         "root": "/",
         "auto_start": true,
-        "open_browser": true,
+        "open_browser": false,
         "browser": null,
         "index": "index.html",
         "spa": false,
@@ -120,7 +154,7 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `host` | `"127.0.0.1"` | Interface to bind. Use `"0.0.0.0"` to reach the server from a phone on the same network. |
 | `root` | `"/"` | Document root, relative to the workspace. For example `"/dist"`. |
 | `auto_start` | `true` | Start serving as soon as the project opens. |
-| `open_browser` | `true` | Open a browser when the server starts. |
+| `open_browser` | `false` | Open a browser when the server starts. Off by default so starting a server does not seize your screen. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
 | `index` | `"index.html"` | File served for directory requests. |
 | `spa` | `false` | Serve `index` for unknown paths instead of a 404, for client-side routers. |

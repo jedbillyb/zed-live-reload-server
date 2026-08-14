@@ -5,6 +5,7 @@
 //! and for anyone who wants the server without the editor.
 
 mod config;
+mod control;
 mod http;
 mod inject;
 mod lsp;
@@ -18,6 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use config::Config;
+use control::Command as ControlCommand;
 use overlay::Overlay;
 use server::{open_browser, LiveServer};
 use tower_lsp::{LspService, Server};
@@ -30,6 +32,18 @@ USAGE:
     live-reload-lsp serve [DIR]      Serve a directory directly, without an editor
     live-reload-lsp --version
     live-reload-lsp --help
+
+CONTROLLING THE EDITOR'S SERVER:
+    live-reload-lsp toggle [DIR]     Start it if stopped, stop it if running
+    live-reload-lsp start [DIR]
+    live-reload-lsp stop [DIR]
+    live-reload-lsp open [DIR]       Open the site, starting the server if needed
+    live-reload-lsp status [DIR]
+
+    These drive the server the editor is already running, so they respect your
+    editor settings. DIR defaults to the current directory and must be the root
+    of a project open in the editor. Bind one to a key with a Zed task; see the
+    README.
 
 SERVE OPTIONS:
     --port <PORT>     Preferred port, scanning upward if taken (default 5500)
@@ -49,6 +63,10 @@ async fn main() {
         Some("--help" | "-h") => println!("{USAGE}"),
         Some("--version" | "-V") => println!("live-reload-lsp {}", env!("CARGO_PKG_VERSION")),
         Some("serve") => serve(&arguments[1..]).await,
+        Some(word) if ControlCommand::parse(word).is_some() => {
+            // Unwrap is sound: the guard above already parsed it.
+            control_command(ControlCommand::parse(word).unwrap(), arguments.get(1))
+        }
         _ => run_lsp().await,
     }
 }
@@ -120,6 +138,18 @@ async fn serve(arguments: &[String]) {
 
     // Nothing else to do on the main task; the accept loop owns the work.
     std::future::pending::<()>().await;
+}
+
+/// Sends a command to the language server the editor is running.
+fn control_command(command: ControlCommand, directory: Option<&String>) {
+    let directory = directory
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    match control::send(&directory, command) {
+        Ok(message) => println!("{message}"),
+        Err(message) => fail(&message),
+    }
 }
 
 /// A bind address is not always something you can point a browser at.
