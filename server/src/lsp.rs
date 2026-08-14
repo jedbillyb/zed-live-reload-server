@@ -1,0 +1,682 @@
+//! The LSP front end.
+//!
+//! Zed extensions cannot register commands, toolbar buttons or status bar
+//! items, so a language server is the only place an extension can put behaviour
+//! with the lifetime of a project. Everything the user can trigger therefore
+//! arrives here: as a code action on the file they are looking at, as a command
+//! executed from one, or as a document change.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+use serde_json::Value;
+use tokio::sync::RwLock;
+use tower_lsp::jsonrpc::{Error as RpcError, Result as RpcResult};
+use tower_lsp::lsp_types::*;
+use tower_lsp::{Client, LanguageServer};
+
+use crate::config::Config;
+use crate::overlay::Overlay;
+use crate::reload::classify;
+use crate::server::{open_browser, LiveServer, Status};
+
+pub const CMD_START: &str = "liveReload.start";
+pub const CMD_STOP: &str = "liveReload.stop";
+pub const CMD_RESTART: &str = "liveReload.restart";
+pub const CMD_OPEN: &str = "liveReload.open";
+
+/// Token for the persistent progress item.
+///
+/// Zed surfaces LSP progress in its status bar, which is the closest thing an
+/// extension has to a status indicator of its own. The item is begun when the
+/// server starts and ended when it stops, so the address stays visible for as
+/// long as the server is up.
+const PROGRESS_TOKEN: &str = "live-reload/status";
+
+pub struct Backend {
+    client: Client,
+    config: Arc<RwLock<Arc<Config>>>,
+    overlay: Overlay,
+    servers: Arc<RwLock<HashMap<PathBuf, Arc<LiveServer>>>>,
+    /// Whether a progress item is currently displayed.
+    progress_shown: Arc<RwLock<bool>>,
+    /// Counter used to coalesce unsaved-buffer changes. Each keystroke takes a
+    /// number; a pending reload only fires if no later keystroke arrived.
+    keystroke: Arc<AtomicU64>,
+}
+
+impl Backend {
+    pub fn new(client: Client) -> Self {
+        Self {
+            client,
+            config: Arc::new(RwLock::new(Arc::new(Config::default()))),
+            overlay: Overlay::default(),
+            servers: Arc::new(RwLock::new(HashMap::new())),
+            progress_shown: Arc::new(RwLock::new(false)),
+            keystroke: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    async fn config(&self) -> Arc<Config> {
+        self.config.read().await.clone()
+    }
+
+    /// Finds the server owning a file, choosing the most deeply nested
+    /// workspace when they are nested inside one another.
+    async fn server_for(&self, file: &Path) -> Option<Arc<LiveServer>> {
+        let servers = self.servers.read().await;
+        servers
+            .iter()
+            .filter(|(root, _)| file.starts_with(root))
+            .max_by_key(|(root, _)| root.as_os_str().len())
+            .map(|(_, server)| server.clone())
+    }
+
+    async fn server_at(&self, root: &Path) -> Option<Arc<LiveServer>> {
+        self.servers.read().await.get(root).cloned()
+    }
+
+    /* ----------------------------------------------------------- reporting */
+
+    async fn info(&self, message: impl std::fmt::Display) {
+        self.client.show_message(MessageType::INFO, message).await;
+    }
+
+    async fn log(&self, message: impl std::fmt::Display) {
+        self.client.log_message(MessageType::INFO, message).await;
+    }
+
+    async fn warn(&self, message: impl std::fmt::Display) {
+        self.client
+            .show_message(MessageType::WARNING, message)
+            .await;
+    }
+
+    /// Shows or updates the status bar item.
+    async fn show_status(&self, text: String) {
+        let token = NumberOrString::String(PROGRESS_TOKEN.to_string());
+        let mut shown = self.progress_shown.write().await;
+
+        if !*shown {
+            // The client may decline to create the token, in which case the
+            // notification below is simply ignored. Not worth failing over.
+            let _ = self
+                .client
+                .send_request::<request::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
+                    token: token.clone(),
+                })
+                .await;
+
+            self.client
+                .send_notification::<notification::Progress>(ProgressParams {
+                    token,
+                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
+                        WorkDoneProgressBegin {
+                            title: text,
+                            cancellable: Some(false),
+                            message: None,
+                            percentage: None,
+                        },
+                    )),
+                })
+                .await;
+            *shown = true;
+            return;
+        }
+
+        self.client
+            .send_notification::<notification::Progress>(ProgressParams {
+                token,
+                value: ProgressParamsValue::WorkDone(WorkDoneProgress::Report(
+                    WorkDoneProgressReport {
+                        cancellable: Some(false),
+                        message: Some(text),
+                        percentage: None,
+                    },
+                )),
+            })
+            .await;
+    }
+
+    async fn clear_status(&self) {
+        let mut shown = self.progress_shown.write().await;
+        if !*shown {
+            return;
+        }
+        self.client
+            .send_notification::<notification::Progress>(ProgressParams {
+                token: NumberOrString::String(PROGRESS_TOKEN.to_string()),
+                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(WorkDoneProgressEnd {
+                    message: None,
+                })),
+            })
+            .await;
+        *shown = false;
+    }
+
+    /// Recomputes the status text from every server we own.
+    async fn refresh_status(&self) {
+        let servers = self.servers.read().await;
+        let mut running = Vec::new();
+        for server in servers.values() {
+            if let Status::Running { port, .. } = server.status().await {
+                running.push(port);
+            }
+        }
+        drop(servers);
+
+        if running.is_empty() {
+            self.clear_status().await;
+            return;
+        }
+
+        running.sort_unstable();
+        let ports = running
+            .iter()
+            .map(|port| port.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.show_status(format!("Live Reload :{ports}")).await;
+    }
+
+    /* ------------------------------------------------------------ actions */
+
+    async fn start(&self, server: &LiveServer, announce: bool) {
+        let config = self.config().await;
+        match server.start(config.clone()).await {
+            Ok((port, warnings)) => {
+                for warning in warnings {
+                    self.warn(warning).await;
+                }
+                if announce {
+                    let where_ = if config.is_public() {
+                        format!("{}:{port} (reachable on your network)", config.host)
+                    } else {
+                        format!("{}:{port}", config.host)
+                    };
+                    self.info(format!("Live Reload started on {where_}")).await;
+                }
+                self.log(format!(
+                    "serving {} on {}:{port}",
+                    server.workspace().display(),
+                    config.host
+                ))
+                .await;
+
+                if config.open_browser {
+                    if let Some(url) = server.url_for(None, &config).await {
+                        if let Err(err) = open_browser(&url, config.browser.as_deref()) {
+                            self.warn(err).await;
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                self.warn(format!("Live Reload could not start: {err}"))
+                    .await
+            }
+        }
+        self.refresh_status().await;
+    }
+
+    async fn stop(&self, server: &LiveServer) {
+        if server.stop().await {
+            self.info("Live Reload stopped").await;
+        }
+        self.refresh_status().await;
+    }
+
+    /* ---------------------------------------------------------- documents */
+
+    /// Pushes a reload for an unsaved buffer change.
+    ///
+    /// Only reached when `live_changes` is on. Saved changes are picked up by
+    /// the filesystem watcher instead, so that edits made outside the editor
+    /// count too and a single save cannot reload the page twice.
+    ///
+    /// Changes are coalesced over `wait`, because this runs on every keystroke
+    /// and reloading the page per character typed would be unusable.
+    async fn buffer_changed(&self, file: &Path) {
+        let config = self.config().await;
+        if !config.live_changes {
+            return;
+        }
+        let Some(server) = self.server_for(file).await else {
+            return;
+        };
+        let Status::Running { .. } = server.status().await else {
+            return;
+        };
+
+        // Hot swapping needs the URL the file is served at, which only exists
+        // for files inside the document root.
+        let Some(url) = server.url_for(Some(file), &config).await else {
+            return;
+        };
+        let path = url
+            .split_once("://")
+            .and_then(|(_, rest)| rest.find('/').map(|index| rest[index..].to_string()))
+            .unwrap_or_else(|| "/".to_string());
+
+        let instruction = classify(&path, config.full_reload);
+
+        // Claim a number, then fire only if still the most recent claim once
+        // the quiet window has passed.
+        let ticket = self.keystroke.fetch_add(1, Ordering::SeqCst) + 1;
+        let keystroke = self.keystroke.clone();
+        let wait = Duration::from_millis(config.wait.max(30));
+
+        tokio::spawn(async move {
+            tokio::time::sleep(wait).await;
+            if keystroke.load(Ordering::SeqCst) == ticket {
+                server.notify(instruction).await;
+            }
+        });
+    }
+
+    /// Rebuilds every running server after the configuration changed.
+    async fn reconfigure(&self, value: Option<Value>) {
+        let (config, error) = Config::parse(value);
+        if let Some(error) = error {
+            self.warn(format!("Live Reload config ignored: {error}"))
+                .await;
+            return;
+        }
+
+        *self.config.write().await = Arc::new(config);
+        let config = self.config().await;
+
+        let servers: Vec<Arc<LiveServer>> = self.servers.read().await.values().cloned().collect();
+        for server in servers {
+            // Only restart what was already running, so changing a setting does
+            // not start servers the user had deliberately stopped.
+            if server.status().await == Status::Stopped {
+                continue;
+            }
+            if let Err(err) = server.restart(config.clone()).await {
+                self.warn(format!("Live Reload could not restart: {err}"))
+                    .await;
+            }
+        }
+        self.refresh_status().await;
+    }
+}
+
+fn file_path(uri: &Url) -> Option<PathBuf> {
+    uri.to_file_path().ok()
+}
+
+/// Builds a code action that runs one of our commands.
+fn action(title: &str, command: &str, arguments: Vec<Value>) -> CodeActionOrCommand {
+    CodeActionOrCommand::CodeAction(CodeAction {
+        title: title.to_string(),
+        kind: Some(CodeActionKind::EMPTY),
+        command: Some(Command {
+            title: title.to_string(),
+            command: command.to_string(),
+            arguments: Some(arguments),
+        }),
+        ..Default::default()
+    })
+}
+
+#[tower_lsp::async_trait]
+impl LanguageServer for Backend {
+    async fn initialize(&self, params: InitializeParams) -> RpcResult<InitializeResult> {
+        let (config, error) = Config::parse(params.initialization_options);
+        *self.config.write().await = Arc::new(config);
+
+        // Reported after initialize completes, since notifications sent during
+        // initialization are not guaranteed to be displayed.
+        if let Some(error) = error {
+            let client = self.client.clone();
+            tokio::spawn(async move {
+                client
+                    .show_message(
+                        MessageType::WARNING,
+                        format!("Live Reload config ignored, using defaults: {error}"),
+                    )
+                    .await;
+            });
+        }
+
+        let mut roots = Vec::new();
+        if let Some(folders) = params.workspace_folders {
+            roots.extend(
+                folders
+                    .into_iter()
+                    .filter_map(|folder| file_path(&folder.uri)),
+            );
+        }
+        #[allow(deprecated)]
+        if roots.is_empty() {
+            if let Some(root) = params.root_uri.as_ref().and_then(file_path) {
+                roots.push(root);
+            }
+        }
+
+        let mut servers = self.servers.write().await;
+        for root in roots {
+            servers.insert(
+                root.clone(),
+                Arc::new(LiveServer::new(root, self.overlay.clone())),
+            );
+        }
+        drop(servers);
+
+        let live_changes = self.config().await.live_changes;
+
+        Ok(InitializeResult {
+            server_info: Some(ServerInfo {
+                name: "Live Reload".to_string(),
+                version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            }),
+            capabilities: ServerCapabilities {
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec![
+                        CMD_START.to_string(),
+                        CMD_STOP.to_string(),
+                        CMD_RESTART.to_string(),
+                        CMD_OPEN.to_string(),
+                    ],
+                    ..Default::default()
+                }),
+                // Streaming every keystroke is only worth the traffic when the
+                // unsaved-buffer feature is actually on.
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(if live_changes {
+                            TextDocumentSyncKind::INCREMENTAL
+                        } else {
+                            TextDocumentSyncKind::NONE
+                        }),
+                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                            include_text: Some(false),
+                        })),
+                        ..Default::default()
+                    },
+                )),
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                        supported: Some(true),
+                        change_notifications: Some(OneOf::Left(true)),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        })
+    }
+
+    async fn initialized(&self, _: InitializedParams) {
+        let config = self.config().await;
+        self.log(format!("Live Reload {} ready", env!("CARGO_PKG_VERSION")))
+            .await;
+
+        if !config.auto_start {
+            return;
+        }
+
+        let servers: Vec<Arc<LiveServer>> = self.servers.read().await.values().cloned().collect();
+        for server in servers {
+            // Announced only once even with several workspace folders open, to
+            // avoid a stack of near-identical notifications on startup.
+            self.start(&server, true).await;
+        }
+    }
+
+    async fn shutdown(&self) -> RpcResult<()> {
+        let servers: Vec<Arc<LiveServer>> = self.servers.read().await.values().cloned().collect();
+        for server in servers {
+            server.stop().await;
+        }
+        self.clear_status().await;
+        Ok(())
+    }
+
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        // Clients wrap the settings under the server's section name, or send
+        // them bare. Unwrap the section if it is there.
+        let settings = params
+            .settings
+            .get("live-reload")
+            .cloned()
+            .or(Some(params.settings));
+        self.reconfigure(settings).await;
+    }
+
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
+        let config = self.config().await;
+
+        for folder in params.event.removed {
+            if let Some(root) = file_path(&folder.uri) {
+                if let Some(server) = self.servers.write().await.remove(&root) {
+                    server.stop().await;
+                }
+            }
+        }
+
+        for folder in params.event.added {
+            let Some(root) = file_path(&folder.uri) else {
+                continue;
+            };
+            let server = Arc::new(LiveServer::new(root.clone(), self.overlay.clone()));
+            self.servers.write().await.insert(root, server.clone());
+            if config.auto_start {
+                self.start(&server, false).await;
+            }
+        }
+
+        self.refresh_status().await;
+    }
+
+    /* ---------------------------------------------------------- documents */
+
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        if !self.config().await.live_changes {
+            return;
+        }
+        let Some(path) = file_path(&params.text_document.uri) else {
+            return;
+        };
+        self.overlay.set(path, params.text_document.text).await;
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        if !self.config().await.live_changes {
+            return;
+        }
+        let Some(path) = file_path(&params.text_document.uri) else {
+            return;
+        };
+
+        for change in params.content_changes {
+            self.overlay.apply(&path, change.range, &change.text).await;
+        }
+        self.buffer_changed(&path).await;
+    }
+
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let Some(path) = file_path(&params.text_document.uri) else {
+            return;
+        };
+        // Once the buffer is on disk the overlay is redundant, and keeping it
+        // would mask any change made to the file by another program.
+        self.overlay.clear(&path).await;
+    }
+
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let Some(path) = file_path(&params.text_document.uri) else {
+            return;
+        };
+        self.overlay.clear(&path).await;
+    }
+
+    /* ------------------------------------------------------------ actions */
+
+    async fn code_action(&self, params: CodeActionParams) -> RpcResult<Option<CodeActionResponse>> {
+        let Some(file) = file_path(&params.text_document.uri) else {
+            return Ok(None);
+        };
+        let Some(server) = self.server_for(&file).await else {
+            return Ok(None);
+        };
+
+        let root = Value::from(server.workspace().to_string_lossy().to_string());
+        let file_argument = Value::from(file.to_string_lossy().to_string());
+
+        // The offered actions describe the server's actual state, so the list
+        // never contains something that would be a no-op.
+        let actions = match server.status().await {
+            Status::Running { port, .. } => vec![
+                action(
+                    &format!("Live Reload: open this file in the browser (:{port})"),
+                    CMD_OPEN,
+                    vec![root.clone(), file_argument],
+                ),
+                action(
+                    &format!("Live Reload: restart server (:{port})"),
+                    CMD_RESTART,
+                    vec![root.clone()],
+                ),
+                action(
+                    &format!("Live Reload: stop server (:{port})"),
+                    CMD_STOP,
+                    vec![root],
+                ),
+            ],
+            Status::Stopped => vec![action("Live Reload: start server", CMD_START, vec![root])],
+        };
+
+        Ok(Some(actions))
+    }
+
+    async fn execute_command(&self, params: ExecuteCommandParams) -> RpcResult<Option<Value>> {
+        let mut arguments = params.arguments.into_iter();
+        let root = arguments
+            .next()
+            .and_then(|argument| argument.as_str().map(PathBuf::from));
+
+        // A command with no workspace argument applies to every workspace,
+        // which is what a keybinding or task invocation will send.
+        let servers: Vec<Arc<LiveServer>> = match &root {
+            Some(root) => self
+                .server_at(root)
+                .await
+                .map(|server| vec![server])
+                .unwrap_or_default(),
+            None => self.servers.read().await.values().cloned().collect(),
+        };
+
+        if servers.is_empty() {
+            return Err(RpcError::invalid_params("no matching workspace"));
+        }
+
+        match params.command.as_str() {
+            CMD_START => {
+                for server in &servers {
+                    self.start(server, true).await;
+                }
+            }
+            CMD_STOP => {
+                for server in &servers {
+                    self.stop(server).await;
+                }
+            }
+            CMD_RESTART => {
+                let config = self.config().await;
+                for server in &servers {
+                    match server.restart(config.clone()).await {
+                        Ok((port, _)) => {
+                            self.info(format!("Live Reload restarted on :{port}")).await
+                        }
+                        Err(err) => {
+                            self.warn(format!("Live Reload could not restart: {err}"))
+                                .await
+                        }
+                    }
+                }
+                self.refresh_status().await;
+            }
+            CMD_OPEN => {
+                let config = self.config().await;
+                let file = arguments
+                    .next()
+                    .and_then(|argument| argument.as_str().map(PathBuf::from));
+
+                for server in &servers {
+                    // Opening implies wanting a server, so start one rather
+                    // than reporting that there is nothing to open.
+                    if server.status().await == Status::Stopped {
+                        self.start(server, false).await;
+                    }
+
+                    let Some(url) = server.url_for(file.as_deref(), &config).await else {
+                        continue;
+                    };
+                    if let Err(err) = open_browser(&url, config.browser.as_deref()) {
+                        self.warn(err).await;
+                    }
+                }
+            }
+            other => {
+                return Err(RpcError::invalid_params(format!(
+                    "unknown command: {other}"
+                )))
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builds_an_action_carrying_its_command() {
+        let CodeActionOrCommand::CodeAction(built) =
+            action("Start", CMD_START, vec![Value::from("/srv")])
+        else {
+            panic!("expected a code action");
+        };
+        let command = built.command.unwrap();
+        assert_eq!(command.command, CMD_START);
+        assert_eq!(command.arguments.unwrap(), vec![Value::from("/srv")]);
+    }
+
+    #[tokio::test]
+    async fn picks_the_most_deeply_nested_workspace_for_a_file() {
+        let outer = PathBuf::from("/srv/project");
+        let inner = PathBuf::from("/srv/project/site");
+
+        let servers: HashMap<PathBuf, Arc<LiveServer>> = [
+            (
+                outer.clone(),
+                Arc::new(LiveServer::new(outer.clone(), Overlay::default())),
+            ),
+            (
+                inner.clone(),
+                Arc::new(LiveServer::new(inner.clone(), Overlay::default())),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let file = Path::new("/srv/project/site/index.html");
+        let chosen = servers
+            .iter()
+            .filter(|(root, _)| file.starts_with(root))
+            .max_by_key(|(root, _)| root.as_os_str().len())
+            .map(|(root, _)| root.clone())
+            .unwrap();
+
+        assert_eq!(chosen, inner);
+    }
+}

@@ -1,0 +1,19 @@
+id = "live-reload"
+name = "Live Reload"
+version = "0.1.0"
+schema_version = 1
+authors = ["jedbillyb <jedbillyb@gmail.com>"]
+description = "Local development server with live reload, modelled on the VS Code Live Server extension."
+repository = "https://github.com/jedbillyb/zed-live-server"
+
+[language_servers.live-reload]
+name = "Live Reload"
+languages = ["HTML", "CSS", "JavaScript", "TypeScript", "TSX", "Markdown"]
+
+[language_servers.live-reload.language_ids]
+"HTML" = "html"
+"CSS" = "css"
+"JavaScript" = "javascript"
+"TypeScript" = "typescript"
+"TSX" = "typescriptreact"
+"Markdown" = "markdown"

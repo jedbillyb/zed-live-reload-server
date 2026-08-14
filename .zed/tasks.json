@@ -1,0 +1,29 @@
+// Optional. These run `live-reload-lsp` as a standalone server in Zed's
+// terminal panel, independently of the one the extension manages.
+//
+// Useful if you want a server bound to a key without going through code
+// actions. Give it a different port from the extension's so the two do not
+// fight over one, or set `"auto_start": false` in your Zed settings and use
+// only these.
+//
+// Run with `task: spawn`, or bind one:
+//   { "context": "Workspace",
+//     "bindings": { "cmd-alt-g": ["task::Spawn", { "task_name": "Live Reload: serve" }] } }
+[
+  {
+    "label": "Live Reload: serve",
+    "command": "live-reload-lsp",
+    "args": ["serve", "--port", "5600", "$ZED_WORKTREE_ROOT"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Live Reload: serve on the network",
+    "command": "live-reload-lsp",
+    "args": ["serve", "--port", "5600", "--host", "0.0.0.0", "$ZED_WORKTREE_ROOT"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  }
+]

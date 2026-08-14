@@ -1,0 +1,40 @@
+[package]
+name = "live-reload-lsp"
+version = "0.1.0"
+edition = "2021"
+description = "Development server with live reload, driven over LSP by the Zed Live Reload extension."
+license = "MIT"
+repository = "https://github.com/jedbillyb/zed-live-server"
+
+[dependencies]
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "fs",
+    "io-util",
+    "io-std",
+    "sync",
+    "time",
+] }
+tower-lsp = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+notify = "8"
+globset = "0.4"
+sha1 = "0.10"
+base64 = "0.22"
+httparse = "1"
+percent-encoding = "2"
+mime_guess = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Own workspace root so the wasm extension build at the repository root never
+# pulls these native-only dependencies into its resolution graph.
+[workspace]
