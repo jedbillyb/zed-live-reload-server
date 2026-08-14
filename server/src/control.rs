@@ -68,21 +68,48 @@ pub struct Request {
 /// logout, which is exactly the lifetime these files want. The temp directory
 /// is the fallback for platforms that do not set it.
 ///
-/// Both are listed rather than only the preferred one, because the server and
-/// the CLI are separate processes that need not share an environment. An editor
-/// launched from a desktop session has `XDG_RUNTIME_DIR`; a shell started
-/// elsewhere may not. Writing to one and looking in the other fails with a
-/// "no server" message that points nowhere near the real cause.
+/// Several candidates are listed rather than only the preferred one, because
+/// the server and the CLI are separate processes that need not share an
+/// environment. An editor launched from a desktop session has
+/// `XDG_RUNTIME_DIR`; a shell started elsewhere may not. Writing to one place
+/// and looking in another fails with a "no server" message that points nowhere
+/// near the real cause.
 fn state_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
+
     if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
         dirs.push(PathBuf::from(runtime).join("live-reload"));
+    } else if let Some(conventional) = conventional_runtime_dir() {
+        // The variable being absent here does not mean the server lacked it.
+        // A desktop session sets it, a bare shell often does not, and looking
+        // only in the temp directory would miss a server that is running
+        // perfectly well.
+        dirs.push(conventional.join("live-reload"));
     }
+
     let temp = std::env::temp_dir().join("live-reload");
     if !dirs.contains(&temp) {
         dirs.push(temp);
     }
     dirs
+}
+
+/// `/run/user/<uid>`, if it exists.
+///
+/// The uid is taken from the ownership of `/proc/self` rather than through
+/// libc, to avoid a dependency for one number.
+#[cfg(target_os = "linux")]
+fn conventional_runtime_dir() -> Option<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+
+    let uid = std::fs::metadata("/proc/self").ok()?.uid();
+    let path = PathBuf::from(format!("/run/user/{uid}"));
+    path.is_dir().then_some(path)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn conventional_runtime_dir() -> Option<PathBuf> {
+    None
 }
 
 /// Filename a workspace's state is stored under.
@@ -515,6 +542,28 @@ mod tests {
         );
         // Whatever the server would write is always among them.
         assert!(paths.contains(&state_path(Path::new("/srv/project"))));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn falls_back_to_the_conventional_runtime_dir_when_the_variable_is_absent() {
+        // A shell started outside a desktop session has no XDG_RUNTIME_DIR,
+        // but the editor that started the server almost certainly did. Without
+        // this the toggle reports "no server" for one that is running fine.
+        let path = conventional_runtime_dir();
+        if path.is_none() {
+            return; // no /run/user on this machine, nothing to assert
+        }
+        let expected = path.unwrap().join("live-reload");
+
+        let saved = std::env::var_os("XDG_RUNTIME_DIR");
+        std::env::remove_var("XDG_RUNTIME_DIR");
+        let dirs = state_dirs();
+        if let Some(saved) = saved {
+            std::env::set_var("XDG_RUNTIME_DIR", saved);
+        }
+
+        assert!(dirs.contains(&expected), "{dirs:?} is missing {expected:?}");
     }
 
     #[test]
