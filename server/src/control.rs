@@ -62,26 +62,57 @@ pub struct Request {
 
 /* -------------------------------------------------------------- state file */
 
-/// Directory holding the per-workspace state files.
+/// Every directory a state file might live in, most preferred first.
 ///
 /// `XDG_RUNTIME_DIR` is preferred because it is user-private and cleared on
 /// logout, which is exactly the lifetime these files want. The temp directory
 /// is the fallback for platforms that do not set it.
-fn state_dir() -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("live-reload")
+///
+/// Both are listed rather than only the preferred one, because the server and
+/// the CLI are separate processes that need not share an environment. An editor
+/// launched from a desktop session has `XDG_RUNTIME_DIR`; a shell started
+/// elsewhere may not. Writing to one and looking in the other fails with a
+/// "no server" message that points nowhere near the real cause.
+fn state_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
+        dirs.push(PathBuf::from(runtime).join("live-reload"));
+    }
+    let temp = std::env::temp_dir().join("live-reload");
+    if !dirs.contains(&temp) {
+        dirs.push(temp);
+    }
+    dirs
 }
 
-/// Path of the state file describing the server for `workspace`.
-pub fn state_path(workspace: &Path) -> PathBuf {
-    // The path is hashed rather than escaped so the name is a predictable
-    // length and cannot collide with directory separators.
-    state_dir().join(format!(
+/// Filename a workspace's state is stored under.
+///
+/// The path is hashed rather than escaped so the name is a predictable length
+/// and cannot collide with directory separators.
+fn state_file_name(workspace: &Path) -> String {
+    format!(
         "{:016x}.json",
         fnv1a(workspace.to_string_lossy().as_bytes())
-    ))
+    )
+}
+
+/// Where the server writes this workspace's state file.
+pub fn state_path(workspace: &Path) -> PathBuf {
+    let name = state_file_name(workspace);
+    state_dirs()
+        .into_iter()
+        .next()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(name)
+}
+
+/// Everywhere the CLI should look for a workspace's state file.
+fn state_paths(workspace: &Path) -> Vec<PathBuf> {
+    let name = state_file_name(workspace);
+    state_dirs()
+        .into_iter()
+        .map(|dir| dir.join(&name))
+        .collect()
 }
 
 /// FNV-1a. Hand-rolled because `DefaultHasher` is explicitly not guaranteed to
@@ -293,18 +324,28 @@ pub fn send(workspace: &Path, command: Command) -> Result<String, String> {
     let workspace = workspace
         .canonicalize()
         .map_err(|err| format!("{}: {err}", workspace.display()))?;
-    let path = state_path(&workspace);
 
-    let state = std::fs::read_to_string(&path).map_err(|err| {
-        if err.kind() == ErrorKind::NotFound {
-            format!(
-                "no Live Reload server for {}.\n\
-                 The editor has to be open on that project with a file open in it.",
-                workspace.display()
-            )
-        } else {
-            format!("{}: {err}", path.display())
+    // Try each candidate directory, so an environment mismatch between the
+    // editor and this process does not read as "no server".
+    let candidates = state_paths(&workspace);
+    let mut found = None;
+    for candidate in &candidates {
+        match std::fs::read_to_string(candidate) {
+            Ok(state) => {
+                found = Some((candidate.clone(), state));
+                break;
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => continue,
+            Err(err) => return Err(format!("{}: {err}", candidate.display())),
         }
+    }
+
+    let (path, state) = found.ok_or_else(|| {
+        format!(
+            "no Live Reload server for {}.\n\
+             The editor has to be open on that project with a file open in it.",
+            workspace.display()
+        )
     })?;
 
     let port: u16 = field(&state, "control_port")
@@ -461,6 +502,26 @@ mod tests {
 
         assert_eq!(response.trim(), "error: bad token");
         remove_state(&path);
+    }
+
+    #[test]
+    fn looks_in_both_the_runtime_and_temp_directories() {
+        // The server and the CLI are separate processes and need not share an
+        // environment, so a file written under either must still be found.
+        let paths = state_paths(Path::new("/srv/project"));
+        assert!(
+            paths.len() >= 2 || std::env::var_os("XDG_RUNTIME_DIR").is_none(),
+            "expected both candidates, got {paths:?}"
+        );
+        // Whatever the server would write is always among them.
+        assert!(paths.contains(&state_path(Path::new("/srv/project"))));
+    }
+
+    #[test]
+    fn every_candidate_uses_the_same_file_name() {
+        let paths = state_paths(Path::new("/srv/project"));
+        let names: Vec<_> = paths.iter().filter_map(|p| p.file_name()).collect();
+        assert!(names.windows(2).all(|w| w[0] == w[1]), "{paths:?}");
     }
 
     #[test]
