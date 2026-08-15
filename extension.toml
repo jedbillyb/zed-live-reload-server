@@ -1,6 +1,6 @@
 id = "live-reload-server"
 name = "Live Reload Server"
-version = "0.4.3"
+version = "0.4.4"
 schema_version = 1
 authors = ["jedbillyb <jedbillyb@gmail.com>"]
 description = "Local development server with live reload, modelled on the VS Code Live Server extension."

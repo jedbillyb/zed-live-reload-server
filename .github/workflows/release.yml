@@ -1,8 +1,8 @@
 name: Release
 
-# Publishes the `live-reload-lsp` binaries that the extension downloads on
+# Publishes the `live-reload-server-lsp` binaries that the extension downloads on
 # first use. Asset names must stay in sync with `src/lib.rs`:
-#   live-reload-lsp-{arch}-{os}.tar.gz
+#   live-reload-server-lsp-{arch}-{os}.tar.gz
 on:
   push:
     tags: ["v*"]
@@ -70,12 +70,12 @@ jobs:
         run: |
           set -euo pipefail
           case "${{ matrix.target }}" in
-            *windows*) bin="live-reload-lsp.exe" ;;
-            *)         bin="live-reload-lsp" ;;
+            *windows*) bin="live-reload-server-lsp.exe" ;;
+            *)         bin="live-reload-server-lsp" ;;
           esac
           # `src/lib.rs` builds the asset name as `{arch}-{os}`, which is
           # exactly the target triple, so the triple is used verbatim here.
-          name="live-reload-lsp-${{ matrix.target }}"
+          name="live-reload-server-lsp-${{ matrix.target }}"
           mkdir -p "dist/${name}"
           cp "target/${{ matrix.target }}/release/${bin}" "dist/${name}/${bin}"
           tar -czf "dist/${name}.tar.gz" -C "dist/${name}" "${bin}"

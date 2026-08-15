@@ -3,7 +3,7 @@
 //! Zed extensions run as sandboxed WASM and cannot open sockets, watch the
 //! filesystem or spawn long-lived processes. Registering a language server is
 //! the one supported way to get a native process with the lifetime of the
-//! project, so the actual development server lives in `live-reload-lsp` and
+//! project, so the actual development server lives in `live-reload-server-lsp` and
 //! this crate exists only to locate that binary and hand it the user's config.
 
 use std::fs;
@@ -15,7 +15,7 @@ use zed_extension_api::{
 /// Name of the language server as declared in `extension.toml`.
 const SERVER_ID: &str = "live-reload-server";
 /// Binary published by this repository's release workflow.
-const BINARY_NAME: &str = "live-reload-lsp";
+const BINARY_NAME: &str = "live-reload-server-lsp";
 const REPO: &str = "jedbillyb/zed-live-reload-server";
 
 struct LiveReloadExtension {

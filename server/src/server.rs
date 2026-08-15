@@ -409,7 +409,7 @@ mod tests {
         // the listening socket alive until that task was actually dropped. An
         // immediate restart then found the port still taken and scanned to the
         // next one, stranding any browser already pointed at the original.
-        let directory = std::env::temp_dir().join("live-reload-restart-test");
+        let directory = std::env::temp_dir().join("live-reload-server-restart-test");
         std::fs::create_dir_all(&directory).unwrap();
 
         let server = LiveServer::new(directory, Overlay::default());

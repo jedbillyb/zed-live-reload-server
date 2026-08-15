@@ -25,7 +25,7 @@
     // The one binding worth having: start the server and open the page in
     // your default browser, then stop it again on the next press.
     "label": "Live Reload Server: go",
-    "command": "live-reload-lsp",
+    "command": "live-reload-server-lsp",
     "args": ["go", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -35,7 +35,7 @@
   {
     // Same, but never touches the browser.
     "label": "Live Reload Server: toggle",
-    "command": "live-reload-lsp",
+    "command": "live-reload-server-lsp",
     "args": ["toggle", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -44,7 +44,7 @@
   },
   {
     "label": "Live Reload Server: open browser",
-    "command": "live-reload-lsp",
+    "command": "live-reload-server-lsp",
     "args": ["open", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -53,7 +53,7 @@
   },
   {
     "label": "Live Reload Server: status",
-    "command": "live-reload-lsp",
+    "command": "live-reload-server-lsp",
     "args": ["status", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -61,7 +61,7 @@
   },
   {
     "label": "Live Reload Server: stop",
-    "command": "live-reload-lsp",
+    "command": "live-reload-server-lsp",
     "args": ["stop", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
     "allow_concurrent_runs": false,

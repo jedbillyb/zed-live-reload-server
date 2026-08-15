@@ -65,9 +65,9 @@ server is stopped the only offer is start.
 **A terminal**, from inside the project directory:
 
 ```sh
-live-reload-lsp go        # start and open, or stop if running
-live-reload-lsp status
-live-reload-lsp stop
+live-reload-server-lsp go        # start and open, or stop if running
+live-reload-server-lsp status
+live-reload-server-lsp stop
 ```
 
 All three drive the server the extension is already running, so they use your
@@ -140,10 +140,10 @@ extensions have no webview, so this serves the buffer over HTTP to a real browse
 The same binary is a standalone server:
 
 ```
-live-reload-lsp serve ./public --port 3000
-live-reload-lsp serve --host 0.0.0.0 --no-browser
-live-reload-lsp serve --spa
-live-reload-lsp --help
+live-reload-server-lsp serve ./public --port 3000
+live-reload-server-lsp serve --host 0.0.0.0 --no-browser
+live-reload-server-lsp serve --spa
+live-reload-server-lsp --help
 ```
 
 With no arguments it speaks LSP on stdio, which is how Zed starts it.
@@ -200,7 +200,7 @@ Nothing is stuck. Set `"status_bar": false` to have neither.
 Zed extensions run as sandboxed WASM. They cannot open sockets, watch the
 filesystem or spawn long-lived processes. Declaring a language server is the one
 supported way to get a native process with the lifetime of the project. The
-extension is a thin shim that locates `live-reload-lsp` and passes it your
+extension is a thin shim that locates `live-reload-server-lsp` and passes it your
 settings; the binary does the work.
 
 That is also why the server only exists while a file is open in the project. Zed
@@ -244,14 +244,14 @@ rustup target add wasm32-wasip2
 cargo build --target wasm32-wasip2 --release
 ```
 
-`live-reload-lsp` on your `PATH` is picked up automatically, ahead of any
+`live-reload-server-lsp` on your `PATH` is picked up automatically, ahead of any
 downloaded copy. To point at a build somewhere else:
 
 ```json
 {
   "lsp": {
     "live-reload-server": {
-      "binary": { "path": "/path/to/zed-live-reload-server/server/target/release/live-reload-lsp" }
+      "binary": { "path": "/path/to/zed-live-reload-server/server/target/release/live-reload-server-lsp" }
     }
   }
 }
@@ -259,7 +259,7 @@ downloaded copy. To point at a build somewhere else:
 
 Installing from source rather than the registry: clone this repository, then in
 Zed use **zed: extensions**, **Install Dev Extension**, and pick the clone. The
-`live-reload-lsp` binary is downloaded from this repository's releases on first
+`live-reload-server-lsp` binary is downloaded from this repository's releases on first
 use.
 
 ## Licence

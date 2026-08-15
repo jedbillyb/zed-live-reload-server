@@ -7,7 +7,7 @@
 //!
 //! This bridges that gap. While the language server is running it also listens
 //! on a loopback port and records how to reach it in a small state file keyed by
-//! workspace. `live-reload-lsp toggle <dir>` then finds that file and drives the
+//! workspace. `live-reload-server-lsp toggle <dir>` then finds that file and drives the
 //! real server, so a one-key task gets the same behaviour as the code action,
 //! including the user's settings and the unsaved-buffer mode.
 
@@ -88,16 +88,16 @@ fn state_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
     if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
-        dirs.push(PathBuf::from(runtime).join("live-reload"));
+        dirs.push(PathBuf::from(runtime).join("live-reload-server"));
     } else if let Some(conventional) = conventional_runtime_dir() {
         // The variable being absent here does not mean the server lacked it.
         // A desktop session sets it, a bare shell often does not, and looking
         // only in the temp directory would miss a server that is running
         // perfectly well.
-        dirs.push(conventional.join("live-reload"));
+        dirs.push(conventional.join("live-reload-server"));
     }
 
-    let temp = std::env::temp_dir().join("live-reload");
+    let temp = std::env::temp_dir().join("live-reload-server");
     if !dirs.contains(&temp) {
         dirs.push(temp);
     }
@@ -494,7 +494,7 @@ mod tests {
 
     #[tokio::test]
     async fn drives_a_command_end_to_end_over_the_socket() {
-        let workspace = std::env::temp_dir().join("live-reload-control-test");
+        let workspace = std::env::temp_dir().join("live-reload-server-control-test");
         std::fs::create_dir_all(&workspace).unwrap();
 
         let (tx, mut rx) = mpsc::channel::<Request>(4);
@@ -519,7 +519,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_a_wrong_token() {
-        let workspace = std::env::temp_dir().join("live-reload-control-auth-test");
+        let workspace = std::env::temp_dir().join("live-reload-server-control-auth-test");
         std::fs::create_dir_all(&workspace).unwrap();
 
         let (tx, mut rx) = mpsc::channel::<Request>(4);
@@ -573,7 +573,7 @@ mod tests {
         if path.is_none() {
             return; // no /run/user on this machine, nothing to assert
         }
-        let expected = path.unwrap().join("live-reload");
+        let expected = path.unwrap().join("live-reload-server");
 
         let saved = std::env::var_os("XDG_RUNTIME_DIR");
         std::env::remove_var("XDG_RUNTIME_DIR");
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn reports_a_missing_server_clearly() {
-        let workspace = std::env::temp_dir().join("live-reload-absent-test");
+        let workspace = std::env::temp_dir().join("live-reload-server-absent-test");
         std::fs::create_dir_all(&workspace).unwrap();
         remove_state(&state_path(&workspace.canonicalize().unwrap()));
 
@@ -610,7 +610,7 @@ mod tests {
     /// temporary directory is /var/folders resolving to /private/var/folders.
     #[tokio::test]
     async fn a_symlinked_root_finds_the_same_server() {
-        let base = std::env::temp_dir().join("live-reload-symlink-test");
+        let base = std::env::temp_dir().join("live-reload-server-symlink-test");
         let real = base.join("real");
         let link = base.join("link");
         std::fs::create_dir_all(&real).unwrap();

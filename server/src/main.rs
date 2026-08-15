@@ -1,4 +1,4 @@
-//! `live-reload-lsp`, the native half of the Zed Live Reload extension.
+//! `live-reload-server-lsp`, the native half of the Zed Live Reload extension.
 //!
 //! Normally started by the editor and spoken to over LSP on stdio. It can also
 //! be run directly as a plain development server, which is useful for testing
@@ -25,21 +25,21 @@ use server::{open_browser, LiveServer};
 use tower_lsp::{LspService, Server};
 
 const USAGE: &str = "\
-live-reload-lsp - development server with live reload
+live-reload-server-lsp - development server with live reload
 
 USAGE:
-    live-reload-lsp [--stdio]        Speak LSP on stdio (the default; used by Zed)
-    live-reload-lsp serve [DIR]      Serve a directory directly, without an editor
-    live-reload-lsp --version
-    live-reload-lsp --help
+    live-reload-server-lsp [--stdio]        Speak LSP on stdio (the default; used by Zed)
+    live-reload-server-lsp serve [DIR]      Serve a directory directly, without an editor
+    live-reload-server-lsp --version
+    live-reload-server-lsp --help
 
 CONTROLLING THE EDITOR'S SERVER:
-    live-reload-lsp go [DIR]         Start and open a browser, or stop if running
-    live-reload-lsp toggle [DIR]     Start it if stopped, stop it if running
-    live-reload-lsp start [DIR]
-    live-reload-lsp stop [DIR]
-    live-reload-lsp open [DIR]       Open the site, starting the server if needed
-    live-reload-lsp status [DIR]
+    live-reload-server-lsp go [DIR]         Start and open a browser, or stop if running
+    live-reload-server-lsp toggle [DIR]     Start it if stopped, stop it if running
+    live-reload-server-lsp start [DIR]
+    live-reload-server-lsp stop [DIR]
+    live-reload-server-lsp open [DIR]       Open the site, starting the server if needed
+    live-reload-server-lsp status [DIR]
 
     These drive the server the editor is already running, so they respect your
     editor settings. DIR defaults to the current directory and must be the root
@@ -62,7 +62,7 @@ async fn main() {
 
     match arguments.first().map(String::as_str) {
         Some("--help" | "-h") => println!("{USAGE}"),
-        Some("--version" | "-V") => println!("live-reload-lsp {}", env!("CARGO_PKG_VERSION")),
+        Some("--version" | "-V") => println!("live-reload-server-lsp {}", env!("CARGO_PKG_VERSION")),
         Some("serve") => serve(&arguments[1..]).await,
         Some(word) if ControlCommand::parse(word).is_some() => {
             // Unwrap is sound: the guard above already parsed it.
@@ -163,6 +163,6 @@ fn displayable_host(host: &str) -> &str {
 }
 
 fn fail(message: &str) {
-    eprintln!("live-reload-lsp: {message}");
+    eprintln!("live-reload-server-lsp: {message}");
     std::process::exit(1);
 }

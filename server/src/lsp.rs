@@ -42,7 +42,7 @@ pub const CMD_OPEN: &str = "liveReload.open";
 /// one token for the whole session therefore left the status bar reading
 /// "Live Reload: starting…" for as long as the server was up, since the width
 /// available in the status bar truncated everything after it.
-const PROGRESS_TOKEN_PREFIX: &str = "live-reload/status";
+const PROGRESS_TOKEN_PREFIX: &str = "live-reload-server/status";
 
 /// The progress item currently on screen.
 #[derive(Clone)]
