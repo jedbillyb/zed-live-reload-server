@@ -83,6 +83,13 @@ pub struct Config {
     pub open_browser: bool,
     /// Browser command to use. `None` defers to the system default handler.
     pub browser: Option<String>,
+    /// Show the server's address in the editor's status bar.
+    ///
+    /// Worth turning off if the spinner beside it bothers you. LSP progress is
+    /// the only way an extension can put text in Zed's status bar, and Zed
+    /// draws every progress item with a loading spinner and no way to ask for
+    /// anything else, so the text and the spinner can only be had together.
+    pub status_bar: bool,
     /// File served for directory requests.
     pub index: String,
     /// Serve `index` for unknown paths instead of a 404, for client-side routers.
@@ -114,6 +121,7 @@ impl Default for Config {
             auto_start: default_true(),
             open_browser: false,
             browser: None,
+            status_bar: default_true(),
             index: default_index(),
             spa: false,
             cors: false,
@@ -185,6 +193,15 @@ mod tests {
         let (first, _) = Config::parse(Some(settings.clone()));
         let (second, _) = Config::parse(Some(settings));
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn the_status_bar_is_on_unless_it_is_turned_off() {
+        assert!(Config::default().status_bar);
+
+        let (config, error) = Config::parse(Some(json!({ "status_bar": false })));
+        assert!(error.is_none());
+        assert!(!config.status_bar);
     }
 
     #[test]

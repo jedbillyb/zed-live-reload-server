@@ -116,6 +116,7 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `auto_start` | `true` | Start serving as soon as the project opens. |
 | `open_browser` | `false` | Open a browser when the server starts. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
+| `status_bar` | `true` | Show the address in Zed's status bar. Turn off if the spinner beside it bothers you. |
 | `index` | `"index.html"` | File served for directory requests. |
 | `spa` | `false` | Serve `index` for unknown paths instead of a 404, for client-side routers. |
 | `cors` | `false` | Send `Access-Control-Allow-Origin: *`. |
@@ -172,6 +173,11 @@ offers language servers, slash commands, themes, context servers, debug
 adapters, snippets and docs, and no UI extension point at all. The other items
 in Zed's status bar are Zed's own code, not extensions.
 
+This is not something an extension can ship for itself. An extension is a WASM
+guest whose entire host surface is fixed when Zed is compiled: settings, file
+download, HTTP, processes, and the language server, slash command, theme,
+context server, debug adapter, snippet and docs hooks. Nothing draws.
+
 [Zed discussion #53403][rfc] proposes a Visual Extension API with a status bar
 API as its first phase. When that ships, wiring a button to the existing
 start/stop commands is a small change.
@@ -189,7 +195,23 @@ driven by a keybinding instead of a click:
 ### Why does the status bar show a spinner?
 
 LSP progress is the only way an extension can put text in Zed's status bar, and
-Zed draws progress as work in progress. Nothing is stuck.
+Zed draws every progress item with a loading spinner:
+
+```rust
+// crates/activity_indicator/src/activity_indicator.rs
+return Some(Content {
+    icon: ActivityIcon::LoadingSpinner,
+    message,
+    on_click: None,
+    ...
+```
+
+There is no field in the protocol that can ask for a different icon, and ending
+the progress removes the text along with the spinner. So the two come together
+or not at all. Nothing is stuck, and the spinner is not reporting that the
+server is busy.
+
+Set `"status_bar": false` to have neither.
 
 ### Why is this a language server?
 

@@ -146,6 +146,14 @@ impl Backend {
     /// since the title is fixed for the life of a token and the title is what
     /// gets displayed.
     async fn show_status(&self, text: String) {
+        // Checked before taking the lock, since clearing takes it too. Clearing
+        // rather than simply returning matters when the setting is turned off
+        // while an item is on screen.
+        if !self.config().await.status_bar {
+            self.clear_status().await;
+            return;
+        }
+
         let mut status = self.status.write().await;
 
         if let Some(current) = status.as_ref() {
