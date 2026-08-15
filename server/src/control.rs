@@ -252,6 +252,13 @@ pub async fn listen(
     workspace: PathBuf,
     requests: mpsc::Sender<Request>,
 ) -> Result<PathBuf, String> {
+    // Canonicalised for the same reason `send` canonicalises: the state file is
+    // named after a hash of this path, and the two sides only meet if they spell
+    // it identically. An editor may hand us a symlinked root, and macOS reaches
+    // the temporary directory through /var while resolving it to /private/var,
+    // either of which is enough to hide a running server from the CLI.
+    let workspace = workspace.canonicalize().unwrap_or(workspace);
+
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|err| format!("control channel: {err}"))?;
@@ -593,5 +600,43 @@ mod tests {
 
         let error = send(&workspace, Command::Status).unwrap_err();
         assert!(error.contains("no Live Reload server"), "{error}");
+    }
+
+    /// The server and the CLI name the state file by hashing the workspace
+    /// path, so they only ever meet if both resolve it the same way. Reaching
+    /// the same directory by a second name used to write one file and look for
+    /// another, which surfaced as "no Live Reload server" for a server that was
+    /// running. macOS hits this without any symlink of its own, because the
+    /// temporary directory is /var/folders resolving to /private/var/folders.
+    #[tokio::test]
+    async fn a_symlinked_root_finds_the_same_server() {
+        let base = std::env::temp_dir().join("live-reload-symlink-test");
+        let real = base.join("real");
+        let link = base.join("link");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::remove_file(&link).ok();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        #[cfg(not(unix))]
+        if std::os::windows::fs::symlink_dir(&real, &link).is_err() {
+            return; // Unprivileged Windows cannot create symlinks.
+        }
+
+        let (tx, mut rx) = mpsc::channel::<Request>(4);
+        // The editor announces the unresolved root...
+        let path = listen(link.clone(), tx).await.unwrap();
+        tokio::spawn(async move {
+            while let Some(request) = rx.recv().await {
+                let _ = request.reply.send("ok".to_string());
+            }
+        });
+
+        // ...and the CLI resolves it before looking the server up.
+        let response = tokio::task::spawn_blocking(move || send(&real, Command::Status))
+            .await
+            .unwrap();
+        assert_eq!(response.unwrap(), "ok");
+
+        remove_state(&path);
     }
 }

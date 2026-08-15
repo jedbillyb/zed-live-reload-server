@@ -81,7 +81,22 @@ impl Backend {
     }
 
     async fn server_at(&self, root: &Path) -> Option<Arc<LiveServer>> {
-        self.servers.read().await.get(root).cloned()
+        let servers = self.servers.read().await;
+        if let Some(server) = servers.get(root) {
+            return Some(server.clone());
+        }
+
+        // The control channel canonicalises the path it is given, while these
+        // keys are however the editor spelled the workspace root. Those differ
+        // whenever a root is reached through a symlink, and on macOS for
+        // anything under the temporary directory. Falling back to a resolved
+        // comparison keeps a control command from reporting "no workspace" for
+        // a server that is plainly running.
+        let target = root.canonicalize().ok()?;
+        servers
+            .iter()
+            .find(|(key, _)| key.canonicalize().map(|key| key == target).unwrap_or(false))
+            .map(|(_, server)| server.clone())
     }
 
     /* ----------------------------------------------------------- reporting */
