@@ -1,6 +1,6 @@
 [package]
 name = "live-reload-server-lsp"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2021"
 description = "Development server with live reload, driven over LSP by the Zed Live Reload extension."
 license = "MIT"

@@ -62,7 +62,9 @@ async fn main() {
 
     match arguments.first().map(String::as_str) {
         Some("--help" | "-h") => println!("{USAGE}"),
-        Some("--version" | "-V") => println!("live-reload-server-lsp {}", env!("CARGO_PKG_VERSION")),
+        Some("--version" | "-V") => {
+            println!("live-reload-server-lsp {}", env!("CARGO_PKG_VERSION"))
+        }
         Some("serve") => serve(&arguments[1..]).await,
         Some(word) if ControlCommand::parse(word).is_some() => {
             // Unwrap is sound: the guard above already parsed it.
