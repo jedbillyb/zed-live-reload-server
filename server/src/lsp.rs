@@ -118,6 +118,13 @@ impl Backend {
 
     /* ----------------------------------------------------------- reporting */
 
+    /// Shows a notification, if the user wants them.
+    async fn info(&self, message: impl std::fmt::Display) {
+        if self.config().await.info_messages {
+            self.client.show_message(MessageType::INFO, message).await;
+        }
+    }
+
     async fn log(&self, message: impl std::fmt::Display) {
         self.client.log_message(MessageType::INFO, message).await;
     }
@@ -229,16 +236,8 @@ impl Backend {
 
     /// Starts a server and narrates it in the status bar.
     ///
-    /// Deliberately silent otherwise. A `window/showMessage` becomes a toast in
-    /// the corner of the editor that has to be dismissed, which is too much
-    /// ceremony for something that happens on every press of the toggle key.
-    /// The status bar item is the feedback. Warnings and failures still speak
-    /// up.
-    ///
-    /// This is a departure from the VS Code extension, which does announce
-    /// "Server is Started at port : 5500" and offers `donotShowInfoMsg` to
-    /// turn it off. Worth reconsidering as a setting of the same shape if
-    /// anyone misses it.
+    /// Also announces the port, unless `info_messages` is off. The VS Code
+    /// extension does the same, and spells the setting `donotShowInfoMsg`.
     async fn start(&self, server: &LiveServer) {
         // Mirrors the VS Code Live Server button's wording, so the status bar
         // narrates the transition rather than sitting blank while a port is
@@ -263,6 +262,11 @@ impl Backend {
                     config.host
                 ))
                 .await;
+                self.info(format!(
+                    "Live Reload started on {}:{port}{reach}",
+                    config.host
+                ))
+                .await;
 
                 if config.open_browser {
                     if let Some(url) = server.url_for(None, &config).await {
@@ -281,15 +285,17 @@ impl Backend {
     }
 
     async fn stop(&self, server: &LiveServer) {
-        // Only narrate a stop that has something to stop.
-        if server.status().await == Status::Stopped {
+        // Only narrate a stop that has something to stop. The port is read
+        // before stopping, since afterwards there is nothing left to ask.
+        let Status::Running { port, .. } = server.status().await else {
             self.refresh_status().await;
             return;
-        }
+        };
 
         self.show_status("Live Reload: disposing\u{2026}".to_string())
             .await;
         server.stop().await;
+        self.info(format!("Live Reload stopped on :{port}")).await;
         self.refresh_status().await;
     }
 
@@ -757,7 +763,10 @@ impl LanguageServer for Backend {
                 let config = self.config().await;
                 for server in &servers {
                     match server.restart(config.clone()).await {
-                        Ok((port, _)) => self.log(format!("restarted on :{port}")).await,
+                        Ok((port, _)) => {
+                            self.log(format!("restarted on :{port}")).await;
+                            self.info(format!("Live Reload restarted on :{port}")).await;
+                        }
                         Err(err) => {
                             self.warn(format!("Live Reload could not restart: {err}"))
                                 .await

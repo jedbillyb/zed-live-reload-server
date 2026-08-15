@@ -34,9 +34,10 @@ repository's releases on first use.
 
 ## Usage
 
-Nothing serves until you ask it to. While the server is up, its address shows in
-Zed's status bar as `Live Reload :5500`. Set `"auto_start": true` to have it
-running from the moment a project opens instead.
+Nothing serves until you ask it to. Starting and stopping are announced in the
+corner of the editor, and while the server is up its address shows in Zed's
+status bar as `Live Reload :5500`. Set `"auto_start": true` to have it running
+from the moment a project opens instead.
 
 ### One keystroke
 
@@ -130,6 +131,7 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `auto_start` | `false` | Start serving as soon as the project opens, rather than waiting to be asked. |
 | `open_browser` | `false` | Open a browser when the server starts. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
+| `info_messages` | `true` | Announce starts and stops as a notification. VS Code spells this `donotShowInfoMsg`, the other way round. |
 | `status_bar` | `true` | Show the address in Zed's status bar. Turn off if the spinner beside it bothers you. |
 | `index` | `"index.html"` | File served for directory requests. |
 | `spa` | `false` | Serve `index` for unknown paths instead of a 404, for client-side routers. |

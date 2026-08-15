@@ -87,6 +87,12 @@ pub struct Config {
     pub open_browser: bool,
     /// Browser command to use. `None` defers to the system default handler.
     pub browser: Option<String>,
+    /// Announce starts and stops as a notification in the editor.
+    ///
+    /// The VS Code extension does this by default and calls the setting
+    /// `donotShowInfoMsg`, spelled the other way round. Warnings and failures
+    /// are shown regardless of this.
+    pub info_messages: bool,
     /// Show the server's address in the editor's status bar.
     ///
     /// Worth turning off if the spinner beside it bothers you. LSP progress is
@@ -125,6 +131,7 @@ impl Default for Config {
             auto_start: false,
             open_browser: false,
             browser: None,
+            info_messages: default_true(),
             status_bar: default_true(),
             index: default_index(),
             spa: false,
@@ -207,6 +214,15 @@ mod tests {
         let (config, error) = Config::parse(Some(json!({ "auto_start": true })));
         assert!(error.is_none());
         assert!(config.auto_start);
+    }
+
+    #[test]
+    fn starts_and_stops_are_announced_unless_silenced() {
+        assert!(Config::default().info_messages);
+
+        let (config, error) = Config::parse(Some(json!({ "info_messages": false })));
+        assert!(error.is_none());
+        assert!(!config.info_messages);
     }
 
     #[test]
