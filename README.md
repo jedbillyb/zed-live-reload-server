@@ -1,4 +1,4 @@
-# Live Reload for Zed
+# Live Reload Server for Zed
 
 A local development server with live reload, in the spirit of the
 [VS Code Live Server extension][vscode-live-server].
@@ -8,7 +8,7 @@ Edit a file, and the page in your browser updates.
 ## Quick start
 
 **1.** Install the extension. In Zed: **zed: extensions**, search for
-**Live Reload**.
+**Live Reload Server**.
 
 **2.** Add the tasks. Copy [`.zed/tasks.json`](.zed/tasks.json) into your
 project, or into `~/.config/zed/tasks.json` for every project.
@@ -21,7 +21,7 @@ project, or into `~/.config/zed/tasks.json` for every project.
   {
     "context": "Workspace",
     "bindings": {
-      "alt-s": ["task::Spawn", { "task_name": "Live Reload: go" }]
+      "alt-s": ["task::Spawn", { "task_name": "Live Reload Server: go" }]
     }
   }
 ]
@@ -56,11 +56,11 @@ server is stopped the only offer is start.
 
 | Task | Does |
 |---|---|
-| `Live Reload: go` | Start and open a browser, or stop if running |
-| `Live Reload: toggle` | Same, without the browser |
-| `Live Reload: open browser` | Open the site, starting the server if needed |
-| `Live Reload: status` | Print the current state |
-| `Live Reload: stop` | Stop the server |
+| `Live Reload Server: go` | Start and open a browser, or stop if running |
+| `Live Reload Server: toggle` | Same, without the browser |
+| `Live Reload Server: open browser` | Open the site, starting the server if needed |
+| `Live Reload Server: status` | Print the current state |
+| `Live Reload Server: stop` | Stop the server |
 
 **A terminal**, from inside the project directory:
 
@@ -75,13 +75,13 @@ settings. None of them starts a second server.
 
 ## Settings
 
-Configure under `lsp.live-reload` in Zed's `settings.json`. Names follow the VS
+Configure under `lsp.live-reload-server` in Zed's `settings.json`. Names follow the VS
 Code Live Server options where an equivalent exists, in snake_case.
 
 ```json
 {
   "lsp": {
-    "live-reload": {
+    "live-reload-server": {
       "initialization_options": {
         "port": 5500,
         "root": "/dist"
@@ -250,8 +250,8 @@ downloaded copy. To point at a build somewhere else:
 ```json
 {
   "lsp": {
-    "live-reload": {
-      "binary": { "path": "/path/to/zed-live-server/server/target/release/live-reload-lsp" }
+    "live-reload-server": {
+      "binary": { "path": "/path/to/zed-live-reload-server/server/target/release/live-reload-lsp" }
     }
   }
 }

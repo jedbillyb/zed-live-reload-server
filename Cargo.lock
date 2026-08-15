@@ -339,8 +339,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
-name = "live-reload"
-version = "0.1.1"
+name = "live-reload-server"
+version = "0.4.3"
 dependencies = [
  "serde",
  "serde_json",

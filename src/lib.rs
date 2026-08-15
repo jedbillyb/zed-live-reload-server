@@ -13,10 +13,10 @@ use zed_extension_api::{
 };
 
 /// Name of the language server as declared in `extension.toml`.
-const SERVER_ID: &str = "live-reload";
+const SERVER_ID: &str = "live-reload-server";
 /// Binary published by this repository's release workflow.
 const BINARY_NAME: &str = "live-reload-lsp";
-const REPO: &str = "jedbillyb/zed-live-server";
+const REPO: &str = "jedbillyb/zed-live-reload-server";
 
 struct LiveReloadExtension {
     cached_binary_path: Option<String>,

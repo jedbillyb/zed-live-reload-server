@@ -615,7 +615,7 @@ impl LanguageServer for Backend {
         // them bare. Unwrap the section if it is there.
         let settings = params
             .settings
-            .get("live-reload")
+            .get("live-reload-server")
             .cloned()
             .or(Some(params.settings));
         self.reconfigure(settings).await;

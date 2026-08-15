@@ -1,4 +1,4 @@
-// Live Reload tasks.
+// Live Reload Server tasks.
 //
 // Copy these into your own project's .zed/tasks.json, or into
 // ~/.config/zed/tasks.json to have them everywhere.
@@ -11,12 +11,12 @@
 //     {
 //       "context": "Workspace",
 //       "bindings": {
-//         "alt-1": ["task::Spawn", { "task_name": "Live Reload: go" }]
+//         "alt-s": ["task::Spawn", { "task_name": "Live Reload Server: go" }]
 //       }
 //     }
 //   ]
 //
-// Any keystroke works; "alt-1" is only a suggestion.
+// Any keystroke works; "alt-s" is only a suggestion.
 //
 // `hide: "on_success"` keeps the terminal panel from stealing focus, so a
 // toggle is a single keystroke with no visible interruption.
@@ -24,7 +24,7 @@
   {
     // The one binding worth having: start the server and open the page in
     // your default browser, then stop it again on the next press.
-    "label": "Live Reload: go",
+    "label": "Live Reload Server: go",
     "command": "live-reload-lsp",
     "args": ["go", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
@@ -34,7 +34,7 @@
   },
   {
     // Same, but never touches the browser.
-    "label": "Live Reload: toggle",
+    "label": "Live Reload Server: toggle",
     "command": "live-reload-lsp",
     "args": ["toggle", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
@@ -43,7 +43,7 @@
     "hide": "on_success"
   },
   {
-    "label": "Live Reload: open browser",
+    "label": "Live Reload Server: open browser",
     "command": "live-reload-lsp",
     "args": ["open", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
@@ -52,7 +52,7 @@
     "hide": "on_success"
   },
   {
-    "label": "Live Reload: status",
+    "label": "Live Reload Server: status",
     "command": "live-reload-lsp",
     "args": ["status", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,
@@ -60,7 +60,7 @@
     "reveal": "always"
   },
   {
-    "label": "Live Reload: stop",
+    "label": "Live Reload Server: stop",
     "command": "live-reload-lsp",
     "args": ["stop", "$ZED_WORKTREE_ROOT"],
     "use_new_terminal": false,

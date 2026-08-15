@@ -1,10 +1,10 @@
 [package]
 name = "live-reload-lsp"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2021"
 description = "Development server with live reload, driven over LSP by the Zed Live Reload extension."
 license = "MIT"
-repository = "https://github.com/jedbillyb/zed-live-server"
+repository = "https://github.com/jedbillyb/zed-live-reload-server"
 
 [dependencies]
 tokio = { version = "1", features = [
