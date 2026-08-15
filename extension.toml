@@ -1,9 +1,9 @@
 id = "live-reload-server"
 name = "Live Reload Server"
-version = "0.4.5"
+version = "0.4.6"
 schema_version = 1
-authors = ["jedbillyb <jedbillyb@gmail.com>"]
-description = "Local development server with live reload, modelled on the VS Code Live Server extension."
+authors = ["jedbillyb <hello@jedbillyb.com>"]
+description = "Serve a project locally and reload the browser as you edit. CSS and images swap in place, everything else reloads and keeps its scroll position."
 repository = "https://github.com/jedbillyb/zed-live-reload-server"
 
 [language_servers.live-reload-server]

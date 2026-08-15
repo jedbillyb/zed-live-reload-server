@@ -1,9 +1,10 @@
 # Live Reload Server for Zed
 
-A local development server with live reload, in the spirit of the
-[VS Code Live Server extension][vscode-live-server].
+Serve a project locally and watch the browser keep up with you.
 
-Edit a file, and the page in your browser updates.
+Edit a file, and the page updates. CSS and images swap in place without a
+reload, everything else reloads and comes back to the scroll position you were
+at.
 
 ## Quick start
 
@@ -36,7 +37,7 @@ pick a replacement carefully: see [choosing a key](#choosing-a-key).
 
 ## What you get
 
-- One key to start, view and stop, like the VS Code "Go Live" button
+- One key to start it, view it and stop it again
 - CSS and images hot swap in place; everything else full reloads and restores
   scroll position
 - Watches the filesystem, so Sass, bundlers and `git checkout` reload too
@@ -75,8 +76,7 @@ settings. None of them starts a second server.
 
 ## Settings
 
-Configure under `lsp.live-reload-server` in Zed's `settings.json`. Names follow the VS
-Code Live Server options where an equivalent exists, in snake_case.
+Configure under `lsp.live-reload-server` in Zed's `settings.json`.
 
 ```json
 {
@@ -99,7 +99,7 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `auto_start` | `false` | Start serving as soon as the project opens, rather than waiting to be asked. |
 | `open_browser` | `false` | Open a browser when the server starts. The `go` task does this for you. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
-| `info_messages` | `true` | Announce starts and stops as a notification. VS Code spells this `donotShowInfoMsg`, the other way round. |
+| `info_messages` | `true` | Announce starts and stops as a notification. |
 | `status_bar` | `true` | Show the address in Zed's status bar. |
 | `index` | `"index.html"` | File served for directory requests. |
 | `spa` | `false` | Serve `index` for unknown paths instead of a 404, for client-side routers. |
@@ -131,9 +131,10 @@ memory and serves it in place of the file on disk.
 - Editing HTML means a full page reload on every pause. Fine for CSS work, less
   so on a page with heavy JavaScript state. `full_reload` and `wait` are the knobs.
 
-The VS Code Live Server does not do this; it only watches the filesystem.
-Microsoft's separate Live Preview does, but inside a webview it controls. Zed
-extensions have no webview, so this serves the buffer over HTTP to a real browser.
+Most live-reload tools cannot do this, because they only watch the filesystem
+and an unsaved buffer never touches it. The ones that can generally render into
+an editor pane they control. Zed extensions have no such pane, so this serves
+the buffer over HTTP to a real browser instead.
 
 ## Without Zed
 
