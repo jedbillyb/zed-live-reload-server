@@ -76,6 +76,10 @@ pub struct Config {
     /// Document root, relative to the workspace root.
     pub root: String,
     /// Start serving as soon as the project opens.
+    ///
+    /// Off by default, so the server is only ever running because you asked for
+    /// it. On, the first press of a toggle key stops the server, which reads as
+    /// the key doing nothing at all.
     pub auto_start: bool,
     /// Open a browser when the server starts. Off by default: starting a
     /// server should not seize the screen, and the site is one keystroke or
@@ -118,7 +122,7 @@ impl Default for Config {
             port: default_port(),
             host: default_host(),
             root: default_root(),
-            auto_start: default_true(),
+            auto_start: false,
             open_browser: false,
             browser: None,
             status_bar: default_true(),
@@ -193,6 +197,16 @@ mod tests {
         let (first, _) = Config::parse(Some(settings.clone()));
         let (second, _) = Config::parse(Some(settings));
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn nothing_serves_until_it_is_asked_to() {
+        // A toggle key is only predictable if the server starts stopped.
+        assert!(!Config::default().auto_start);
+
+        let (config, error) = Config::parse(Some(json!({ "auto_start": true })));
+        assert!(error.is_none());
+        assert!(config.auto_start);
     }
 
     #[test]

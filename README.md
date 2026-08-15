@@ -34,8 +34,9 @@ repository's releases on first use.
 
 ## Usage
 
-The server starts when you open a project and shows its address in Zed's status
-bar as `Live Reload :5500`. It does not open a browser unless you ask it to.
+Nothing serves until you ask it to. While the server is up, its address shows in
+Zed's status bar as `Live Reload :5500`. Set `"auto_start": true` to have it
+running from the moment a project opens instead.
 
 ### One keystroke
 
@@ -48,14 +49,27 @@ Copy [`.zed/tasks.json`](.zed/tasks.json) into your project, or into
   {
     "context": "Workspace",
     "bindings": {
-      "alt-1": ["task::Spawn", { "task_name": "Live Reload: go" }]
+      "alt-s": ["task::Spawn", { "task_name": "Live Reload: go" }]
     }
   }
 ]
 ```
 
 Press it to start the server and open the page in your default browser. Press it
-again to stop. Any keystroke works; `alt-1` is only a suggestion.
+again to stop.
+
+Any key works, but check that the one you pick is genuinely free. Zed's default
+keymap binds most `alt-` chords already, and **a default binding in a deeper
+context beats yours in a shallower one**, silently. `alt-1` is the trap: it looks
+unused, but it is `pane::ActivateItem` in the `Pane` context, which sits inside
+`Workspace`, so it switches tabs and your task never runs. As of Zed 1.15 these
+are unbound on Linux:
+
+```
+alt-            a e g h i m n o p q s u v x z
+alt-shift-      b c d e f g h j k m n p s v w 0-9
+ctrl-alt-       m q u v w 1-9
+```
 
 Other tasks, if you want them on separate keys:
 
@@ -113,7 +127,7 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `port` | `5500` | Preferred port. If taken, scans upward up to 50 ports. `0` picks any free port. |
 | `host` | `"127.0.0.1"` | Interface to bind. `"0.0.0.0"` to reach the server from another device. |
 | `root` | `"/"` | Document root, relative to the workspace. For example `"/dist"`. |
-| `auto_start` | `true` | Start serving as soon as the project opens. |
+| `auto_start` | `false` | Start serving as soon as the project opens, rather than waiting to be asked. |
 | `open_browser` | `false` | Open a browser when the server starts. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
 | `status_bar` | `true` | Show the address in Zed's status bar. Turn off if the spinner beside it bothers you. |
