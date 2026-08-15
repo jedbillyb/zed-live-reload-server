@@ -3,30 +3,22 @@
 A local development server with live reload, in the spirit of the
 [VS Code Live Server extension][vscode-live-server].
 
-Edit a file, and the page in your browser updates. Stylesheets and images are
-swapped in place without losing scroll position or page state; everything else
-does a full reload that restores your scroll position afterwards.
+Edit a file, and the page in your browser updates.
 
 - **Registry id:** `live-reload`
-- **Repository:** `jedbillyb/zed-live-server`
+- **Binary:** `live-reload-lsp`
 
----
+## Features
 
-## Why this exists
-
-There is already a [Live Server extension for Zed][frederik]. This one was
-written because that one has some significant gaps:
-
-| | That one | This one |
-|---|---|---|
-| `/live-server-start` and `/live-server-stop` | Print a hardcoded string and do nothing | No fake commands. Start and stop are real code actions |
-| Reported port | Hardcoded `57391`, regardless of the real port | Always the actual bound port |
-| Starting and stopping | Not possible. The server runs from the moment you open an HTML file | Start, stop and restart on demand, plus `auto_start` if you want the old behaviour |
-| Documented `lazy` / `public` / `start_port` settings | Never wired up. The extension passes a fixed `--eager` and no init options | Full settings, applied live |
-| Port already in use | Retries in an unbounded loop with no backoff, and never tells you where it landed | Scans upward, then reports the port it got |
-| External file changes | Not noticed. Only editor events trigger reloads | Watches the filesystem, so Sass, bundlers and `git checkout` reload too |
-| Reload strategy | CSS updates a style tag, everything else full reloads | CSS and images hot swap, full reloads restore scroll position |
-| Ranged requests | Not supported, so `<video>` will not seek | `Range` supported |
+- Start and stop on demand, or serve automatically when a project opens
+- CSS and images hot swap in place; everything else full reloads and restores
+  scroll position
+- Watches the filesystem, so Sass, bundlers and `git checkout` reload too
+- Reports the port it actually bound, scanning upward if the preferred one is taken
+- `Range` requests, so `<video>` seeks
+- SPA fallback, CORS, extra mounts, directory listings
+- Serve to a phone on the same network with `"host": "0.0.0.0"`
+- Optional beta: update the page as you type, without saving
 
 ## Install
 
@@ -36,27 +28,19 @@ Not yet in the Zed extension registry. To install as a dev extension:
 git clone https://github.com/jedbillyb/zed-live-server
 ```
 
-Then in Zed: **zed: extensions** → **Install Dev Extension** → pick the cloned
-directory.
+In Zed: **zed: extensions** → **Install Dev Extension** → pick the cloned
+directory. The matching `live-reload-lsp` binary is downloaded from this
+repository's releases on first use.
 
-The extension downloads the matching `live-reload-lsp` binary from this
-repository's releases on first use. To use your own build instead, see
-[Building from source](#building-from-source).
+## Usage
 
-## Using it
-
-The server starts when you open a project and reports its address in Zed's
-status bar as `Live Reload :5500`.
-
-**It does not open a browser on its own.** Starting a server should not seize
-your screen, so `open_browser` is off by default. Turn it on if you want the
-old behaviour.
+The server starts when you open a project and shows its address in Zed's status
+bar as `Live Reload :5500`. It does not open a browser unless you ask it to.
 
 ### One keystroke
 
-The fastest way to start and stop is a bound task. Copy [`.zed/tasks.json`]
-from this repo into your project (or `~/.config/zed/tasks.json` for all
-projects), then bind it:
+Copy [`.zed/tasks.json`](.zed/tasks.json) into your project, or into
+`~/.config/zed/tasks.json` for all projects, then bind it:
 
 ```json
 // ~/.config/zed/keymap.json
@@ -70,69 +54,40 @@ projects), then bind it:
 ]
 ```
 
-That one key is the whole cycle. Press it and the server starts and the page
-opens in your default browser; press it again and the server stops. Nothing
-else needs a binding, no menu appears, and no terminal steals focus.
+Press it to start the server and open the page in your default browser. Press it
+again to stop. Any keystroke works; `alt-1` is only a suggestion.
 
-`alt-1` is only a suggestion. Any Zed keystroke works, since this is an
-ordinary keybinding, so pick whatever is free in your layout and leave the
-task name on the right alone.
+Other tasks, if you want them on separate keys:
 
-If you would rather start the server without a browser window appearing, bind
-**Live Reload: toggle** instead, and **Live Reload: open browser** separately.
+| Task | Does |
+|---|---|
+| `Live Reload: go` | Start and open a browser, or stop if running |
+| `Live Reload: toggle` | Same, without the browser |
+| `Live Reload: open browser` | Open the site, starting the server if needed |
+| `Live Reload: status` | Print the current state |
+| `Live Reload: stop` | Stop the server |
 
-These drive the very same server the extension runs, so they respect your
-settings and keep the unsaved-buffer mode working. They are not a second
-server.
+These drive the server the extension is already running, so they use your
+settings. They do not start a second server.
 
 ### Code actions
 
-The same operations are available without any setup. Right-click in the editor
-and choose **Code Actions**:
+Available with no setup. Right-click in the editor and choose **Code Actions**:
 
-- *Live Reload: open this file in the browser (:5500)* - opens the file you are
-  on, not just the index
+- *Live Reload: open this file in the browser (:5500)*
 - *Live Reload: restart server (:5500)*
 - *Live Reload: stop server (:5500)*
 
-When the server is stopped the only offer is *start server*, so the list never
-contains something that would do nothing.
+When the server is stopped the only offer is *start server*.
 
 ### From a terminal
 
 ```sh
-live-reload-lsp go        # in the project directory: start + browser, or stop
+live-reload-lsp go        # in the project directory: start and open, or stop
 live-reload-lsp toggle    # same, without the browser
 live-reload-lsp status
-live-reload-lsp open
+live-reload-lsp stop
 ```
-
-### Why there is no status bar button
-
-Zed extensions **cannot add status bar buttons**. The extension API
-(`zed_extension_api` 0.7) offers language servers, slash commands, themes,
-context servers, debug adapters, snippets and docs, and no UI extension point
-at all, so no extension can put a Go Live button down there.
-
-This is being worked on upstream: [Zed discussion #53403][rfc] proposes a
-Visual Extension API, with a status bar API as its first phase. When that
-ships, wiring a button to the start/stop commands here will be a small change.
-
-Until then the status bar narrates the same states the VS Code button does,
-driven by the keybinding instead of a click:
-
-| VS Code button | Here |
-|---|---|
-| `Go Live` | (nothing shown) |
-| `Starting...` | `Live Reload: starting…` |
-| `Port: 5500` | `Live Reload :5500` |
-| `Disposing...` | `Live Reload: disposing…` |
-
-It carries a spinner while the server runs. That is unavoidable: LSP progress
-is the only way an extension can put text in Zed's status bar, and Zed draws
-progress as work in progress. Nothing is stuck.
-
-[rfc]: https://github.com/zed-industries/zed/discussions/53403
 
 ## Settings
 
@@ -145,20 +100,8 @@ Code Live Server options where an equivalent exists, in snake_case.
     "live-reload": {
       "initialization_options": {
         "port": 5500,
-        "host": "127.0.0.1",
-        "root": "/",
-        "auto_start": true,
         "open_browser": false,
-        "browser": null,
-        "index": "index.html",
-        "spa": false,
-        "cors": false,
-        "directory_listing": true,
-        "wait": 100,
-        "full_reload": false,
-        "ignore_files": ["**/node_modules/**", "**/*.log"],
-        "mount": [{ "route": "/lib", "path": "node_modules" }],
-        "live_changes": false
+        "root": "/dist"
       }
     }
   }
@@ -168,10 +111,10 @@ Code Live Server options where an equivalent exists, in snake_case.
 | Setting | Default | What it does |
 |---|---|---|
 | `port` | `5500` | Preferred port. If taken, scans upward up to 50 ports. `0` picks any free port. |
-| `host` | `"127.0.0.1"` | Interface to bind. Use `"0.0.0.0"` to reach the server from a phone on the same network. |
+| `host` | `"127.0.0.1"` | Interface to bind. `"0.0.0.0"` to reach the server from another device. |
 | `root` | `"/"` | Document root, relative to the workspace. For example `"/dist"`. |
 | `auto_start` | `true` | Start serving as soon as the project opens. |
-| `open_browser` | `false` | Open a browser when the server starts. Off by default so starting a server does not seize your screen. |
+| `open_browser` | `false` | Open a browser when the server starts. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
 | `index` | `"index.html"` | File served for directory requests. |
 | `spa` | `false` | Serve `index` for unknown paths instead of a 404, for client-side routers. |
@@ -180,8 +123,8 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `wait` | `100` | Milliseconds to coalesce rapid changes into one reload. |
 | `full_reload` | `false` | Always reload the whole page, never hot swap. |
 | `ignore_files` | see below | Glob patterns whose changes never trigger a reload. |
-| `mount` | `[]` | Extra directories served outside the document root. |
-| `live_changes` | `false` | **Beta.** Serve unsaved editor buffers. See below. |
+| `mount` | `[]` | Extra directories served outside the document root, as `[{ "route": "/lib", "path": "node_modules" }]`. |
+| `live_changes` | `false` | Beta. Serve unsaved editor buffers. See below. |
 
 Settings can go in `initialization_options` or `settings`; both are read, and
 `settings` wins if you use both. Changing them restarts any running server.
@@ -192,55 +135,108 @@ you write `**/dist` or `**/dist/**`.
 
 ## Live changes without saving (beta)
 
-Off by default. Turn it on with `"live_changes": true`.
+Off by default. Turn it on with `"live_changes": true`, and the page updates as
+you type. The editor sends each change over LSP, the server holds that text in
+memory and serves it in place of the file on disk.
 
-With it on, the page updates **as you type**, without saving. The editor sends
-each keystroke over LSP, the server keeps that text in memory, and serves it in
-place of the file on disk.
+- Only files open in the editor are served from memory. Everything else comes
+  from disk.
+- Saving drops the overlay, and the file on disk takes over again.
+- Changes are coalesced over `wait` ms, so a burst of typing is one reload.
+- Editing HTML means a full page reload on every pause. Fine for CSS work, less
+  so on a page with heavy JavaScript state. `full_reload` and `wait` are the knobs.
 
-Worth knowing before you turn it on:
+The VS Code Live Server does not do this; it only watches the filesystem.
+Microsoft's separate Live Preview does, but inside a webview it controls. Zed
+extensions have no webview, so this serves the buffer over HTTP to a real browser.
 
-- **This is not how the VS Code Live Server works.** That extension only ever
-  watches the filesystem, so it reloads on save and nothing else. Microsoft's
-  separate *Live Preview* extension does update as you type, but only inside a
-  webview it controls. Zed extensions have no webview, so this takes a different
-  route: the buffer is served over HTTP to a real browser.
-- Only files **open in the editor** are served from memory. Everything else
-  comes from disk as usual.
-- Once you save, the overlay is dropped and the file on disk takes over again.
-- Changes are coalesced over `wait` milliseconds, so a burst of typing produces
-  one reload rather than one per character.
-- Editing HTML means a full page reload on every pause in typing. If you are
-  working on CSS this feels great; on a heavy page with lots of JavaScript state,
-  it may not. `full_reload` and `wait` are the knobs.
-
-## Running it without Zed
+## Without Zed
 
 The same binary is a standalone server:
 
 ```
 live-reload-lsp serve ./public --port 3000
 live-reload-lsp serve --host 0.0.0.0 --no-browser
-live-reload-lsp serve --spa            # for client-side routers
+live-reload-lsp serve --spa
 live-reload-lsp --help
 ```
 
 With no arguments it speaks LSP on stdio, which is how Zed starts it.
+
+## FAQ
+
+### Why is there no clickable status bar button?
+
+Zed extensions cannot add one. The extension API (`zed_extension_api` 0.7)
+offers language servers, slash commands, themes, context servers, debug
+adapters, snippets and docs, and no UI extension point at all. The other items
+in Zed's status bar are Zed's own code, not extensions.
+
+[Zed discussion #53403][rfc] proposes a Visual Extension API with a status bar
+API as its first phase. When that ships, wiring a button to the existing
+start/stop commands is a small change.
+
+Until then the status bar narrates the same states the VS Code button does,
+driven by a keybinding instead of a click:
+
+| VS Code button | Here |
+|---|---|
+| `Go Live` | (nothing shown) |
+| `Starting...` | `Live Reload: starting…` |
+| `Port: 5500` | `Live Reload :5500` |
+| `Disposing...` | `Live Reload: disposing…` |
+
+### Why does the status bar show a spinner?
+
+LSP progress is the only way an extension can put text in Zed's status bar, and
+Zed draws progress as work in progress. Nothing is stuck.
+
+### Why is this a language server?
+
+Zed extensions run as sandboxed WASM. They cannot open sockets, watch the
+filesystem or spawn long-lived processes. Declaring a language server is the one
+supported way to get a native process with the lifetime of the project. The
+extension is a thin shim that locates `live-reload-lsp` and passes it your
+settings; the binary does the work.
+
+### How does the reload work?
+
+The server injects a script before `</body>` in every HTML response, which opens
+a WebSocket back to it. On a change it picks the cheapest update: swap a
+stylesheet in place (loading the new one alongside the old, so there is no flash
+of unstyled content), re-fetch an image, or full reload with scroll position
+saved and restored. A batch containing any full reload collapses to one reload.
+
+The trigger is the filesystem, not editor save events, so changes from other
+programs reload the page and a single save cannot fire twice.
+
+### Why not use the existing Zed Live Server extension?
+
+[frederik-uni/zed-live-server][frederik] has some significant gaps:
+
+| | That one | This one |
+|---|---|---|
+| `/live-server-start` and `/live-server-stop` | Print a hardcoded string and do nothing | Real code actions |
+| Reported port | Hardcoded `57391`, regardless of the real port | The actual bound port |
+| Starting and stopping | Not possible; runs from the moment you open an HTML file | Start, stop and restart on demand |
+| Documented `lazy` / `public` / `start_port` | Never wired up | Full settings, applied live |
+| Port already in use | Unbounded retry loop, never tells you where it landed | Scans upward, reports the port |
+| External file changes | Not noticed; only editor events trigger reloads | Watches the filesystem |
+| Reload strategy | CSS updates a style tag, everything else full reloads | CSS and images hot swap, full reloads restore scroll |
+| Ranged requests | Not supported | Supported |
 
 ## Building from source
 
 Requires a Rust toolchain.
 
 ```bash
-# The server binary
 cd server && cargo build --release && cargo test
 
-# The extension (WASM)
 rustup target add wasm32-wasip2
 cargo build --target wasm32-wasip2 --release
 ```
 
-To point the extension at a local server build instead of a released one:
+To use a local server build:
 
 ```json
 {
@@ -255,42 +251,17 @@ To point the extension at a local server build instead of a released one:
 `live-reload-lsp` on your `PATH` is also picked up automatically, ahead of any
 downloaded copy.
 
-## How it works
-
-Zed extensions run as sandboxed WASM. They cannot open sockets, watch the
-filesystem or spawn long-lived processes, and there is no API for registering a
-command or a button. Declaring a **language server** is the one supported way to
-get a native process with the lifetime of the project, so that is what this is:
-the extension is a thin shim that locates `live-reload-lsp` and passes it your
-settings, and the binary does the real work.
-
-The server injects a small script before `</body>` in every HTML response, which
-opens a WebSocket back to it. When a file changes, the server decides the
-cheapest update that will pick it up:
-
-- a stylesheet is swapped in place, loading the new one alongside the old so
-  there is no flash of unstyled content
-- an image is re-fetched in place
-- anything else is a full reload, with scroll position saved and restored
-
-A batch of changes that includes any full reload collapses to a single reload,
-so a build that rewrites markup and CSS together loads the page once.
-
-The filesystem is the trigger, not editor save events. That means changes from
-Sass, bundlers, `git checkout` and other programs all reload the page, and a
-single save cannot fire twice.
-
-## Credits and licence
+## Licence
 
 MIT. See [LICENSE](LICENSE).
 
-- [ritwickdey/vscode-live-server][vscode-live-server] (MIT) for the original
-  design and the option vocabulary. No code was taken from it; this is an
-  independent implementation in Rust.
-- [frederik-uni/zed-live-server][frederik] (MIT) for establishing that a
-  language server is the way to run a development server from a Zed extension.
-
-This is an independent extension and is not affiliated with either project.
+Credit to [ritwickdey/vscode-live-server][vscode-live-server] (MIT) for the
+original design and the option vocabulary, and to
+[frederik-uni/zed-live-server][frederik] (MIT) for establishing that a language
+server is the way to run a development server from a Zed extension. No code was
+taken from either; this is an independent implementation in Rust and is not
+affiliated with either project.
 
 [vscode-live-server]: https://github.com/ritwickdey/vscode-live-server
 [frederik]: https://github.com/frederik-uni/zed-live-server
+[rfc]: https://github.com/zed-industries/zed/discussions/53403
