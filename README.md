@@ -111,9 +111,19 @@ This is being worked on upstream: [Zed discussion #53403][rfc] proposes a
 Visual Extension API, with a status bar API as its first phase. When that
 ships, wiring a button to the start/stop commands here will be a small change.
 
-Until then, `Live Reload :5500` appears in the language server status area
-while the server runs, and the bound task above is the closest thing to a
-click.
+Until then the status bar narrates the same states the VS Code button does,
+driven by the keybinding instead of a click:
+
+| VS Code button | Here |
+|---|---|
+| `Go Live` | (nothing shown) |
+| `Starting...` | `Live Reload: starting…` |
+| `Port: 5500` | `Live Reload :5500` |
+| `Disposing...` | `Live Reload: disposing…` |
+
+It carries a spinner while the server runs. That is unavoidable: LSP progress
+is the only way an extension can put text in Zed's status bar, and Zed draws
+progress as work in progress. Nothing is stuck.
 
 [rfc]: https://github.com/zed-industries/zed/discussions/53403
 

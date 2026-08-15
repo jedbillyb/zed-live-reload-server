@@ -190,6 +190,12 @@ impl Backend {
     /* ------------------------------------------------------------ actions */
 
     async fn start(&self, server: &LiveServer, announce: bool) {
+        // Mirrors the VS Code Live Server button's wording, so the status bar
+        // narrates the transition rather than sitting blank while a port is
+        // being bound and a file watcher registered.
+        self.show_status("Live Reload: starting\u{2026}".to_string())
+            .await;
+
         let config = self.config().await;
         match server.start(config.clone()).await {
             Ok((port, warnings)) => {
@@ -228,6 +234,14 @@ impl Backend {
     }
 
     async fn stop(&self, server: &LiveServer) {
+        // Only narrate a stop that has something to stop.
+        if server.status().await == Status::Stopped {
+            self.refresh_status().await;
+            return;
+        }
+
+        self.show_status("Live Reload: disposing\u{2026}".to_string())
+            .await;
         if server.stop().await {
             self.info("Live Reload stopped").await;
         }
