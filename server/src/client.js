@@ -152,7 +152,7 @@
 
   /* ----------------------------------------------------------------- badge */
 
-  function showBadge(text, tone) {
+  function showBadge(text) {
     if (!document.body) return;
     if (!badge) {
       badge = document.createElement("div");
@@ -173,15 +173,13 @@
       document.body.appendChild(badge);
     }
     badge.textContent = text;
-    badge.style.background = tone === "error" ? "#b3261e" : "#1f6feb";
+    badge.style.background = "#1f6feb";
     badge.style.opacity = "1";
 
     clearTimeout(badgeTimer);
-    if (tone !== "error") {
-      badgeTimer = setTimeout(function () {
-        if (badge) badge.style.opacity = "0";
-      }, 1500);
-    }
+    badgeTimer = setTimeout(function () {
+      if (badge) badge.style.opacity = "0";
+    }, 1500);
   }
 
   function hideBadge() {
@@ -241,7 +239,11 @@
 
     socket.onclose = function () {
       socket = null;
-      showBadge("live reload disconnected", "error");
+      // Deliberately silent. A stopped server usually means the page is done
+      // with, and a permanent red badge on an abandoned tab is just litter.
+      // The VS Code extension says nothing here either. The retry stays, so a
+      // tab left open still comes back to life if the server returns.
+      hideBadge();
       schedule();
     };
 

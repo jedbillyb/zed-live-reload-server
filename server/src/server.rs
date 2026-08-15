@@ -151,8 +151,9 @@ impl LiveServer {
         // Closes connections that are open but idle between requests, so a
         // pooled browser socket cannot be served after the server has stopped.
         let _ = instance.shutdown.send(());
-        // Dropping the sender closes every browser's WebSocket, which makes the
-        // page show its disconnected state instead of appearing to still be live.
+        // Dropping the sender closes every browser's WebSocket, so a page left
+        // open stops waiting for reloads that are never coming and falls back
+        // to retrying quietly.
         drop(instance.reload);
         self.overlay.clear_all().await;
         true
