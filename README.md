@@ -5,44 +5,15 @@ A local development server with live reload, in the spirit of the
 
 Edit a file, and the page in your browser updates.
 
-- **Registry id:** `live-reload`
-- **Binary:** `live-reload-lsp`
+## Quick start
 
-## Features
+**1.** Install the extension. In Zed: **zed: extensions**, search for
+**Live Reload**.
 
-- Start and stop on demand, or serve automatically when a project opens
-- CSS and images hot swap in place; everything else full reloads and restores
-  scroll position
-- Watches the filesystem, so Sass, bundlers and `git checkout` reload too
-- Reports the port it actually bound, scanning upward if the preferred one is taken
-- `Range` requests, so `<video>` seeks
-- SPA fallback, CORS, extra mounts, directory listings
-- Serve to a phone on the same network with `"host": "0.0.0.0"`
-- Optional beta: update the page as you type, without saving
+**2.** Add the tasks. Copy [`.zed/tasks.json`](.zed/tasks.json) into your
+project, or into `~/.config/zed/tasks.json` for every project.
 
-## Install
-
-Not yet in the Zed extension registry. To install as a dev extension:
-
-```
-git clone https://github.com/jedbillyb/zed-live-server
-```
-
-In Zed: **zed: extensions** → **Install Dev Extension** → pick the cloned
-directory. The matching `live-reload-lsp` binary is downloaded from this
-repository's releases on first use.
-
-## Usage
-
-Nothing serves until you ask it to. Starting and stopping are announced in the
-corner of the editor, and while the server is up its address shows in Zed's
-status bar as `Live Reload :5500`. Set `"auto_start": true` to have it running
-from the moment a project opens instead.
-
-### One keystroke
-
-Copy [`.zed/tasks.json`](.zed/tasks.json) into your project, or into
-`~/.config/zed/tasks.json` for all projects, then bind it:
+**3.** Bind a key:
 
 ```json
 // ~/.config/zed/keymap.json
@@ -56,23 +27,32 @@ Copy [`.zed/tasks.json`](.zed/tasks.json) into your project, or into
 ]
 ```
 
-Press it to start the server and open the page in your default browser. Press it
-again to stop.
+**4.** Open a project with an HTML file in it and press **`alt-s`**. The server
+starts and the page opens in your browser. Press it again to stop.
 
-Any key works, but check that the one you pick is genuinely free. Zed's default
-keymap binds most `alt-` chords already, and **a default binding in a deeper
-context beats yours in a shallower one**, silently. `alt-1` is the trap: it looks
-unused, but it is `pane::ActivateItem` in the `Pane` context, which sits inside
-`Workspace`, so it switches tabs and your task never runs. As of Zed 1.15 these
-are unbound on Linux:
+Steps 2 and 3 are not optional and there is no default key, because Zed
+extensions cannot ship keybindings or tasks. `alt-s` is only a suggestion, but
+pick a replacement carefully: see [choosing a key](#choosing-a-key).
 
-```
-alt-            a e g h i m n o p q s u v x z
-alt-shift-      b c d e f g h j k m n p s v w 0-9
-ctrl-alt-       m q u v w 1-9
-```
+## What you get
 
-Other tasks, if you want them on separate keys:
+- One key to start, view and stop, like the VS Code "Go Live" button
+- CSS and images hot swap in place; everything else full reloads and restores
+  scroll position
+- Watches the filesystem, so Sass, bundlers and `git checkout` reload too
+- Scans upward for a free port and tells you which one it bound
+- `Range` requests, so `<video>` seeks
+- SPA fallback, CORS, extra mounts, directory listings
+- Serve to a phone on the same network with `"host": "0.0.0.0"`
+- Optional beta: update the page as you type, without saving
+
+## Other ways to drive it
+
+**Code actions**, which need no setup. Right-click in the editor, **Code
+Actions**: open this file in the browser, restart server, stop server. When the
+server is stopped the only offer is start.
+
+**Other tasks**, if you want them on separate keys:
 
 | Task | Does |
 |---|---|
@@ -82,27 +62,16 @@ Other tasks, if you want them on separate keys:
 | `Live Reload: status` | Print the current state |
 | `Live Reload: stop` | Stop the server |
 
-These drive the server the extension is already running, so they use your
-settings. They do not start a second server.
-
-### Code actions
-
-Available with no setup. Right-click in the editor and choose **Code Actions**:
-
-- *Live Reload: open this file in the browser (:5500)*
-- *Live Reload: restart server (:5500)*
-- *Live Reload: stop server (:5500)*
-
-When the server is stopped the only offer is *start server*.
-
-### From a terminal
+**A terminal**, from inside the project directory:
 
 ```sh
-live-reload-lsp go        # in the project directory: start and open, or stop
-live-reload-lsp toggle    # same, without the browser
+live-reload-lsp go        # start and open, or stop if running
 live-reload-lsp status
 live-reload-lsp stop
 ```
+
+All three drive the server the extension is already running, so they use your
+settings. None of them starts a second server.
 
 ## Settings
 
@@ -115,7 +84,6 @@ Code Live Server options where an equivalent exists, in snake_case.
     "live-reload": {
       "initialization_options": {
         "port": 5500,
-        "open_browser": false,
         "root": "/dist"
       }
     }
@@ -129,10 +97,10 @@ Code Live Server options where an equivalent exists, in snake_case.
 | `host` | `"127.0.0.1"` | Interface to bind. `"0.0.0.0"` to reach the server from another device. |
 | `root` | `"/"` | Document root, relative to the workspace. For example `"/dist"`. |
 | `auto_start` | `false` | Start serving as soon as the project opens, rather than waiting to be asked. |
-| `open_browser` | `false` | Open a browser when the server starts. |
+| `open_browser` | `false` | Open a browser when the server starts. The `go` task does this for you. |
 | `browser` | `null` | Browser command, with arguments if you like. `null` uses the system default. |
 | `info_messages` | `true` | Announce starts and stops as a notification. VS Code spells this `donotShowInfoMsg`, the other way round. |
-| `status_bar` | `true` | Show the address in Zed's status bar. Turn off if the spinner beside it bothers you. |
+| `status_bar` | `true` | Show the address in Zed's status bar. |
 | `index` | `"index.html"` | File served for directory requests. |
 | `spa` | `false` | Serve `index` for unknown paths instead of a 404, for client-side routers. |
 | `cors` | `false` | Send `Access-Control-Allow-Origin: *`. |
@@ -182,31 +150,32 @@ With no arguments it speaks LSP on stdio, which is how Zed starts it.
 
 ## FAQ
 
-### Why is there no clickable status bar button?
+### Choosing a key
 
-Zed extensions cannot add one. The extension API (`zed_extension_api` 0.7)
-offers language servers, slash commands, themes, context servers, debug
-adapters, snippets and docs, and no UI extension point at all. The other items
-in Zed's status bar are Zed's own code, not extensions.
+Any key works, but check the one you pick is genuinely free. Zed's default
+keymap binds most `alt-` chords already, and **a default binding in a deeper
+context beats yours in a shallower one**, silently.
 
-This is not something an extension can ship for itself. An extension is a WASM
-guest whose entire host surface is fixed when Zed is compiled: settings, file
-download, HTTP, processes, and the language server, slash command, theme,
-context server, debug adapter, snippet and docs hooks. Nothing draws.
+`alt-1` is the trap. It looks unused, but it is `pane::ActivateItem` in the
+`Pane` context, which sits inside `Workspace`, so it switches tabs and your task
+never runs. Unbound on Linux as of Zed 1.15:
+
+```
+alt-            a e g h i m n o p q s u v x z
+alt-shift-      b c d e f g h j k m n p s v w 0-9
+ctrl-alt-       m q u v w 1-9
+```
+
+### Why a task and a keybinding instead of a button?
+
+Zed extensions cannot add one. An extension is a WASM guest whose host surface
+is fixed when Zed is compiled: it can provide languages, themes, debuggers,
+snippets and MCP servers, and nothing that draws. The other items in Zed's
+status bar are Zed's own code.
 
 [Zed discussion #53403][rfc] proposes a Visual Extension API with a status bar
 API as its first phase. When that ships, wiring a button to the existing
 start/stop commands is a small change.
-
-Until then the status bar narrates the same states the VS Code button does,
-driven by a keybinding instead of a click:
-
-| VS Code button | Here |
-|---|---|
-| `Go Live` | (nothing shown) |
-| `Starting...` | `Live Reload: starting…` |
-| `Port: 5500` | `Live Reload :5500` |
-| `Disposing...` | `Live Reload: disposing…` |
 
 ### Why does the status bar show a spinner?
 
@@ -222,12 +191,9 @@ return Some(Content {
     ...
 ```
 
-There is no field in the protocol that can ask for a different icon, and ending
-the progress removes the text along with the spinner. So the two come together
-or not at all. Nothing is stuck, and the spinner is not reporting that the
-server is busy.
-
-Set `"status_bar": false` to have neither.
+No field in the protocol asks for a different icon, and ending the progress
+removes the text along with the spinner, so the two come together or not at all.
+Nothing is stuck. Set `"status_bar": false` to have neither.
 
 ### Why is this a language server?
 
@@ -236,6 +202,9 @@ filesystem or spawn long-lived processes. Declaring a language server is the one
 supported way to get a native process with the lifetime of the project. The
 extension is a thin shim that locates `live-reload-lsp` and passes it your
 settings; the binary does the work.
+
+That is also why the server only exists while a file is open in the project. Zed
+starts a language server on demand.
 
 ### How does the reload work?
 
@@ -248,7 +217,7 @@ saved and restored. A batch containing any full reload collapses to one reload.
 The trigger is the filesystem, not editor save events, so changes from other
 programs reload the page and a single save cannot fire twice.
 
-### Why not use the existing Zed Live Server extension?
+### Why not the existing Zed Live Server extension?
 
 [frederik-uni/zed-live-server][frederik] has some significant gaps:
 
@@ -265,7 +234,8 @@ programs reload the page and a single save cannot fire twice.
 
 ## Building from source
 
-Requires a Rust toolchain.
+Requires a Rust toolchain. The extension is the root crate, the server is
+`server/`.
 
 ```bash
 cd server && cargo build --release && cargo test
@@ -274,7 +244,8 @@ rustup target add wasm32-wasip2
 cargo build --target wasm32-wasip2 --release
 ```
 
-To use a local server build:
+`live-reload-lsp` on your `PATH` is picked up automatically, ahead of any
+downloaded copy. To point at a build somewhere else:
 
 ```json
 {
@@ -286,8 +257,10 @@ To use a local server build:
 }
 ```
 
-`live-reload-lsp` on your `PATH` is also picked up automatically, ahead of any
-downloaded copy.
+Installing from source rather than the registry: clone this repository, then in
+Zed use **zed: extensions**, **Install Dev Extension**, and pick the clone. The
+`live-reload-lsp` binary is downloaded from this repository's releases on first
+use.
 
 ## Licence
 
