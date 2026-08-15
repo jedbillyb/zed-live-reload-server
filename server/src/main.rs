@@ -34,6 +34,7 @@ USAGE:
     live-reload-lsp --help
 
 CONTROLLING THE EDITOR'S SERVER:
+    live-reload-lsp go [DIR]         Start and open a browser, or stop if running
     live-reload-lsp toggle [DIR]     Start it if stopped, stop it if running
     live-reload-lsp start [DIR]
     live-reload-lsp stop [DIR]

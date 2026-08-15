@@ -64,16 +64,22 @@ projects), then bind it:
   {
     "context": "Workspace",
     "bindings": {
-      "cmd-alt-l": ["task::Spawn", { "task_name": "Live Reload: toggle" }],
-      "cmd-alt-o": ["task::Spawn", { "task_name": "Live Reload: open browser" }]
+      "alt-1": ["task::Spawn", { "task_name": "Live Reload: go" }]
     }
   }
 ]
 ```
 
-`cmd-alt-l` now starts the server if it is stopped and stops it if it is
-running, with no menu and no terminal stealing focus. `cmd-alt-o` opens the
-site, starting the server first if needed.
+That one key is the whole cycle. Press it and the server starts and the page
+opens in your default browser; press it again and the server stops. Nothing
+else needs a binding, no menu appears, and no terminal steals focus.
+
+`alt-1` is only a suggestion. Any Zed keystroke works, since this is an
+ordinary keybinding, so pick whatever is free in your layout and leave the
+task name on the right alone.
+
+If you would rather start the server without a browser window appearing, bind
+**Live Reload: toggle** instead, and **Live Reload: open browser** separately.
 
 These drive the very same server the extension runs, so they respect your
 settings and keep the unsaved-buffer mode working. They are not a second
@@ -95,7 +101,8 @@ contains something that would do nothing.
 ### From a terminal
 
 ```sh
-live-reload-lsp toggle    # in the project directory
+live-reload-lsp go        # in the project directory: start + browser, or stop
+live-reload-lsp toggle    # same, without the browser
 live-reload-lsp status
 live-reload-lsp open
 ```

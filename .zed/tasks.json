@@ -11,16 +11,29 @@
 //     {
 //       "context": "Workspace",
 //       "bindings": {
-//         "cmd-alt-l": ["task::Spawn", { "task_name": "Live Reload: toggle" }],
-//         "cmd-alt-o": ["task::Spawn", { "task_name": "Live Reload: open browser" }]
+//         "alt-1": ["task::Spawn", { "task_name": "Live Reload: go" }]
 //       }
 //     }
 //   ]
+//
+// Any keystroke works; "alt-1" is only a suggestion.
 //
 // `hide: "on_success"` keeps the terminal panel from stealing focus, so a
 // toggle is a single keystroke with no visible interruption.
 [
   {
+    // The one binding worth having: start the server and open the page in
+    // your default browser, then stop it again on the next press.
+    "label": "Live Reload: go",
+    "command": "live-reload-lsp",
+    "args": ["go", "$ZED_WORKTREE_ROOT"],
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "never",
+    "hide": "on_success"
+  },
+  {
+    // Same, but never touches the browser.
     "label": "Live Reload: toggle",
     "command": "live-reload-lsp",
     "args": ["toggle", "$ZED_WORKTREE_ROOT"],

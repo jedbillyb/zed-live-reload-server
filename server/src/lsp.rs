@@ -287,6 +287,10 @@ impl Backend {
             // rather than the word the user typed.
             ControlCommand::Toggle if running => ControlCommand::Stop,
             ControlCommand::Toggle => ControlCommand::Start,
+            // `Go` is the same shape, except that the start half also opens a
+            // browser, which `Open` already does.
+            ControlCommand::Go if running => ControlCommand::Stop,
+            ControlCommand::Go => ControlCommand::Open,
             other => other,
         };
 
@@ -325,7 +329,9 @@ impl Backend {
                 Status::Stopped => "stopped".to_string(),
             },
             // Already resolved above.
-            ControlCommand::Toggle => unreachable!("toggle is resolved before dispatch"),
+            ControlCommand::Toggle | ControlCommand::Go => {
+                unreachable!("toggle and go are resolved before dispatch")
+            }
         }
     }
 

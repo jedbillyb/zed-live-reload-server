@@ -25,6 +25,14 @@ pub enum Command {
     Stop,
     /// Stop if running, start if not.
     Toggle,
+    /// Like `Toggle`, but a start also opens the site in a browser.
+    ///
+    /// This is the single-keystroke equivalent of the VS Code "Go Live"
+    /// button: one binding covers start, view and stop, so nothing has to be
+    /// left running in the background and no second key is needed to actually
+    /// see the page. Kept separate from `Toggle` so that `open_browser` can
+    /// stay false for automatic starts without disabling this.
+    Go,
     /// Open the served site in a browser, starting the server if needed.
     Open,
     Status,
@@ -36,6 +44,7 @@ impl Command {
             "start" => Some(Command::Start),
             "stop" => Some(Command::Stop),
             "toggle" => Some(Command::Toggle),
+            "go" => Some(Command::Go),
             "open" => Some(Command::Open),
             "status" => Some(Command::Status),
             _ => None,
@@ -47,6 +56,7 @@ impl Command {
             Command::Start => "start",
             Command::Stop => "stop",
             Command::Toggle => "toggle",
+            Command::Go => "go",
             Command::Open => "open",
             Command::Status => "status",
         }
@@ -414,6 +424,7 @@ mod tests {
         assert_eq!(Command::parse("start"), Some(Command::Start));
         assert_eq!(Command::parse(" STOP\n"), Some(Command::Stop));
         assert_eq!(Command::parse("Toggle"), Some(Command::Toggle));
+        assert_eq!(Command::parse("go"), Some(Command::Go));
         assert_eq!(Command::parse("open"), Some(Command::Open));
         assert_eq!(Command::parse("status"), Some(Command::Status));
         assert_eq!(Command::parse("delete-everything"), None);
@@ -425,6 +436,7 @@ mod tests {
             Command::Start,
             Command::Stop,
             Command::Toggle,
+            Command::Go,
             Command::Open,
             Command::Status,
         ] {
