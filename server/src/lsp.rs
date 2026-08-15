@@ -231,10 +231,14 @@ impl Backend {
     ///
     /// Deliberately silent otherwise. A `window/showMessage` becomes a toast in
     /// the corner of the editor that has to be dismissed, which is too much
-    /// ceremony for something that happens on every project open and on every
-    /// press of the toggle key. The VS Code extension says nothing either; its
-    /// status bar item is the whole of the feedback. Warnings and failures
-    /// still speak up.
+    /// ceremony for something that happens on every press of the toggle key.
+    /// The status bar item is the feedback. Warnings and failures still speak
+    /// up.
+    ///
+    /// This is a departure from the VS Code extension, which does announce
+    /// "Server is Started at port : 5500" and offers `donotShowInfoMsg` to
+    /// turn it off. Worth reconsidering as a setting of the same shape if
+    /// anyone misses it.
     async fn start(&self, server: &LiveServer) {
         // Mirrors the VS Code Live Server button's wording, so the status bar
         // narrates the transition rather than sitting blank while a port is
