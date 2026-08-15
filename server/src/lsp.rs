@@ -29,13 +29,27 @@ pub const CMD_STOP: &str = "liveReload.stop";
 pub const CMD_RESTART: &str = "liveReload.restart";
 pub const CMD_OPEN: &str = "liveReload.open";
 
-/// Token for the persistent progress item.
+/// Prefix for the progress tokens used to drive the status bar item.
 ///
 /// Zed surfaces LSP progress in its status bar, which is the closest thing an
 /// extension has to a status indicator of its own. The item is begun when the
 /// server starts and ended when it stops, so the address stays visible for as
 /// long as the server is up.
-const PROGRESS_TOKEN: &str = "live-reload/status";
+///
+/// Each distinct piece of status text gets its own token, because the text a
+/// client displays is the `Begin` title: a `Report` only carries a secondary
+/// message, which Zed appends after the title rather than replacing it. Keeping
+/// one token for the whole session therefore left the status bar reading
+/// "Live Reload: starting…" for as long as the server was up, since the width
+/// available in the status bar truncated everything after it.
+const PROGRESS_TOKEN_PREFIX: &str = "live-reload/status";
+
+/// The progress item currently on screen.
+#[derive(Clone)]
+struct StatusItem {
+    token: String,
+    text: String,
+}
 
 #[derive(Clone)]
 pub struct Backend {
@@ -43,8 +57,10 @@ pub struct Backend {
     config: Arc<RwLock<Arc<Config>>>,
     overlay: Overlay,
     servers: Arc<RwLock<HashMap<PathBuf, Arc<LiveServer>>>>,
-    /// Whether a progress item is currently displayed.
-    progress_shown: Arc<RwLock<bool>>,
+    /// The progress item currently displayed, if any.
+    status: Arc<RwLock<Option<StatusItem>>>,
+    /// Serial number making each progress token unique.
+    status_serial: Arc<AtomicU64>,
     /// Counter used to coalesce unsaved-buffer changes. Each keystroke takes a
     /// number; a pending reload only fires if no later keystroke arrived.
     keystroke: Arc<AtomicU64>,
@@ -59,7 +75,8 @@ impl Backend {
             config: Arc::new(RwLock::new(Arc::new(Config::default()))),
             overlay: Overlay::default(),
             servers: Arc::new(RwLock::new(HashMap::new())),
-            progress_shown: Arc::new(RwLock::new(false)),
+            status: Arc::new(RwLock::new(None)),
+            status_serial: Arc::new(AtomicU64::new(0)),
             keystroke: Arc::new(AtomicU64::new(0)),
             control_files: Arc::new(RwLock::new(Vec::new())),
         }
@@ -101,10 +118,6 @@ impl Backend {
 
     /* ----------------------------------------------------------- reporting */
 
-    async fn info(&self, message: impl std::fmt::Display) {
-        self.client.show_message(MessageType::INFO, message).await;
-    }
-
     async fn log(&self, message: impl std::fmt::Display) {
         self.client.log_message(MessageType::INFO, message).await;
     }
@@ -115,66 +128,68 @@ impl Backend {
             .await;
     }
 
-    /// Shows or updates the status bar item.
-    async fn show_status(&self, text: String) {
-        let token = NumberOrString::String(PROGRESS_TOKEN.to_string());
-        let mut shown = self.progress_shown.write().await;
-
-        if !*shown {
-            // The client may decline to create the token, in which case the
-            // notification below is simply ignored. Not worth failing over.
-            let _ = self
-                .client
-                .send_request::<request::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
-                    token: token.clone(),
-                })
-                .await;
-
-            self.client
-                .send_notification::<notification::Progress>(ProgressParams {
-                    token,
-                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
-                        WorkDoneProgressBegin {
-                            title: text,
-                            cancellable: Some(false),
-                            message: None,
-                            percentage: None,
-                        },
-                    )),
-                })
-                .await;
-            *shown = true;
-            return;
-        }
-
+    /// Ends the progress item behind `item`, if the client ever showed one.
+    async fn end_progress(&self, item: &StatusItem) {
         self.client
             .send_notification::<notification::Progress>(ProgressParams {
-                token,
-                value: ProgressParamsValue::WorkDone(WorkDoneProgress::Report(
-                    WorkDoneProgressReport {
-                        cancellable: Some(false),
-                        message: Some(text),
-                        percentage: None,
-                    },
-                )),
-            })
-            .await;
-    }
-
-    async fn clear_status(&self) {
-        let mut shown = self.progress_shown.write().await;
-        if !*shown {
-            return;
-        }
-        self.client
-            .send_notification::<notification::Progress>(ProgressParams {
-                token: NumberOrString::String(PROGRESS_TOKEN.to_string()),
+                token: NumberOrString::String(item.token.clone()),
                 value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(WorkDoneProgressEnd {
                     message: None,
                 })),
             })
             .await;
-        *shown = false;
+    }
+
+    /// Shows or updates the status bar item.
+    ///
+    /// Changing the text ends the current progress item and begins a fresh one,
+    /// since the title is fixed for the life of a token and the title is what
+    /// gets displayed.
+    async fn show_status(&self, text: String) {
+        let mut status = self.status.write().await;
+
+        if let Some(current) = status.as_ref() {
+            if current.text == text {
+                return;
+            }
+            self.end_progress(current).await;
+        }
+
+        let serial = self.status_serial.fetch_add(1, Ordering::SeqCst);
+        let token = format!("{PROGRESS_TOKEN_PREFIX}/{serial}");
+
+        // The client may decline to create the token, in which case the
+        // notification below is simply ignored. Not worth failing over.
+        let _ = self
+            .client
+            .send_request::<request::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
+                token: NumberOrString::String(token.clone()),
+            })
+            .await;
+
+        self.client
+            .send_notification::<notification::Progress>(ProgressParams {
+                token: NumberOrString::String(token.clone()),
+                value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
+                    WorkDoneProgressBegin {
+                        title: text.clone(),
+                        cancellable: Some(false),
+                        message: None,
+                        percentage: None,
+                    },
+                )),
+            })
+            .await;
+
+        *status = Some(StatusItem { token, text });
+    }
+
+    async fn clear_status(&self) {
+        let mut status = self.status.write().await;
+        let Some(current) = status.take() else {
+            return;
+        };
+        self.end_progress(&current).await;
     }
 
     /// Recomputes the status text from every server we own.
@@ -204,7 +219,15 @@ impl Backend {
 
     /* ------------------------------------------------------------ actions */
 
-    async fn start(&self, server: &LiveServer, announce: bool) {
+    /// Starts a server and narrates it in the status bar.
+    ///
+    /// Deliberately silent otherwise. A `window/showMessage` becomes a toast in
+    /// the corner of the editor that has to be dismissed, which is too much
+    /// ceremony for something that happens on every project open and on every
+    /// press of the toggle key. The VS Code extension says nothing either; its
+    /// status bar item is the whole of the feedback. Warnings and failures
+    /// still speak up.
+    async fn start(&self, server: &LiveServer) {
         // Mirrors the VS Code Live Server button's wording, so the status bar
         // narrates the transition rather than sitting blank while a port is
         // being bound and a file watcher registered.
@@ -217,16 +240,13 @@ impl Backend {
                 for warning in warnings {
                     self.warn(warning).await;
                 }
-                if announce {
-                    let where_ = if config.is_public() {
-                        format!("{}:{port} (reachable on your network)", config.host)
-                    } else {
-                        format!("{}:{port}", config.host)
-                    };
-                    self.info(format!("Live Reload started on {where_}")).await;
-                }
+                let reach = if config.is_public() {
+                    " (reachable on your network)"
+                } else {
+                    ""
+                };
                 self.log(format!(
-                    "serving {} on {}:{port}",
+                    "serving {} on {}:{port}{reach}",
                     server.workspace().display(),
                     config.host
                 ))
@@ -257,9 +277,7 @@ impl Backend {
 
         self.show_status("Live Reload: disposing\u{2026}".to_string())
             .await;
-        if server.stop().await {
-            self.info("Live Reload stopped").await;
-        }
+        server.stop().await;
         self.refresh_status().await;
     }
 
@@ -321,7 +339,7 @@ impl Backend {
                         Status::Stopped => "stopped".to_string(),
                     };
                 }
-                self.start(&server, true).await;
+                self.start(&server).await;
                 match server.status().await {
                     Status::Running { port, .. } => format!("started on :{port}"),
                     Status::Stopped => "error: failed to start".to_string(),
@@ -329,7 +347,7 @@ impl Backend {
             }
             ControlCommand::Open => {
                 if !running {
-                    self.start(&server, true).await;
+                    self.start(&server).await;
                 }
                 match server.url_for(None, &config).await {
                     Some(url) => match open_browser(&url, config.browser.as_deref()) {
@@ -556,9 +574,7 @@ impl LanguageServer for Backend {
 
         let servers: Vec<Arc<LiveServer>> = self.servers.read().await.values().cloned().collect();
         for server in servers {
-            // Announced only once even with several workspace folders open, to
-            // avoid a stack of near-identical notifications on startup.
-            self.start(&server, true).await;
+            self.start(&server).await;
         }
     }
 
@@ -605,7 +621,7 @@ impl LanguageServer for Backend {
             let server = Arc::new(LiveServer::new(root.clone(), self.overlay.clone()));
             self.servers.write().await.insert(root, server.clone());
             if config.auto_start {
-                self.start(&server, false).await;
+                self.start(&server).await;
             }
         }
 
@@ -717,7 +733,7 @@ impl LanguageServer for Backend {
         match params.command.as_str() {
             CMD_START => {
                 for server in &servers {
-                    self.start(server, true).await;
+                    self.start(server).await;
                 }
             }
             CMD_STOP => {
@@ -729,9 +745,7 @@ impl LanguageServer for Backend {
                 let config = self.config().await;
                 for server in &servers {
                     match server.restart(config.clone()).await {
-                        Ok((port, _)) => {
-                            self.info(format!("Live Reload restarted on :{port}")).await
-                        }
+                        Ok((port, _)) => self.log(format!("restarted on :{port}")).await,
                         Err(err) => {
                             self.warn(format!("Live Reload could not restart: {err}"))
                                 .await
@@ -750,7 +764,7 @@ impl LanguageServer for Backend {
                     // Opening implies wanting a server, so start one rather
                     // than reporting that there is nothing to open.
                     if server.status().await == Status::Stopped {
-                        self.start(server, false).await;
+                        self.start(server).await;
                     }
 
                     let Some(url) = server.url_for(file.as_deref(), &config).await else {
