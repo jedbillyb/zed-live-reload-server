@@ -90,7 +90,7 @@ server.
 The same operations are available without any setup. Right-click in the editor
 and choose **Code Actions**:
 
-- *Live Reload: open this file in the browser (:5500)* — opens the file you are
+- *Live Reload: open this file in the browser (:5500)* - opens the file you are
   on, not just the index
 - *Live Reload: restart server (:5500)*
 - *Live Reload: stop server (:5500)*
